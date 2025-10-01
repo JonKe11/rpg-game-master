@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+.env
+venv/
+env/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.sqlite
+
+# Logs
+*.log
+
+# Cache scrapera (WAŻNE - nie commituj tego)
+cache/
+backend/cache/
+*.cache
+
+# SQLite variants
+*.sqlite
+*.db3
+
+# Pytest
+.pytest_cache/
+.tox/
+
+# Frontend build i coverage
+frontend/build/
+frontend/.next/
+frontend/out/
+frontend/coverage/
+
+# Migration backups (jeśli używasz Alembic)
+backend/alembic/versions/*.pyc
+
+
+
+# Python distribution
+dist/
+*.egg-info/
+.installed.cfg
+
+# Test coverage
+.coverage
+htmlcov/
+
+# Environment variants
+.env.development
+.env.production
+.env.test
+
+# Editor configs (jeśli commitujecie)
+!.vscode/settings.json
+!.editorconfig
