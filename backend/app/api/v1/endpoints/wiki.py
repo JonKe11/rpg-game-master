@@ -1,29 +1,30 @@
 # backend/app/api/v1/endpoints/wiki.py
 from fastapi import APIRouter, HTTPException, Query
-from typing import Dict, List
+from typing import Dict, List, Any
+from pydantic import BaseModel
 from app.services.scraper_service import ScraperService
 
 router = APIRouter()
 
-@router.get("/categories/{universe}/{category}")
+# Pydantic models dla responses
+class CategoryResponse(BaseModel):
+    universe: str
+    category: str
+    count: int
+    items: List[str]
+
+class EntitySearchResponse(BaseModel):
+    entity: str
+    url: str
+
+@router.get("/categories/{universe}/{category}", response_model=CategoryResponse)
 async def get_category_items(
     universe: str,
     category: str,
     search: str = Query(None, description="Search query to filter results"),
     limit: int = Query(200, ge=1, le=500)
-) -> Dict[str, List[str]]:
-    """
-    Pobiera listę elementów z danej kategorii wiki
-    
-    Args:
-        universe: 'star_wars', 'lotr', etc.
-        category: 'species', 'planets', 'organizations', 'colors', 'genders'
-        search: opcjonalne filtrowanie wyników
-        limit: maksymalna liczba wyników
-    
-    Returns:
-        {"items": ["Human", "Twi'lek", ...]}
-    """
+):
+    """Pobiera listę elementów z danej kategorii wiki"""
     scraper_service = ScraperService()
     
     # Walidacja uniwersum
@@ -44,18 +45,16 @@ async def get_category_items(
     
     try:
         if search:
-            # Wyszukiwanie z filtrowaniem
             items = scraper_service.search_category(universe, category, search)
         else:
-            # Pełna lista
             items = scraper_service.get_category_list(universe, category, limit)
         
-        return {
-            "universe": universe,
-            "category": category,
-            "count": len(items),
-            "items": items
-        }
+        return CategoryResponse(
+            universe=universe,
+            category=category,
+            count=len(items),
+            items=items
+        )
     
     except Exception as e:
         raise HTTPException(
@@ -63,7 +62,7 @@ async def get_category_items(
             detail=f"Error fetching category data: {str(e)}"
         )
 
-@router.get("/search/{entity_name}")
+@router.get("/search/{entity_name}", response_model=EntitySearchResponse)
 async def search_entity(
     entity_name: str,
     universe: str = "star_wars"
@@ -75,20 +74,20 @@ async def search_entity(
     if not url:
         raise HTTPException(status_code=404, detail="Entity not found")
     
-    return {"entity": entity_name, "url": url}
+    return EntitySearchResponse(entity=entity_name, url=url)
 
 @router.get("/data/{entity_name}")
 async def get_entity_data(
     entity_name: str,
     universe: str = "star_wars"
-):
-    """Pobiera pełne dane o encji z wiki - zoptymalizowane dla formularza"""
+) -> Dict[str, Any]:
+    """Pobiera pełne dane o encji z wiki"""
     scraper_service = ScraperService()
     
     try:
         data = scraper_service.get_entity_data(entity_name, universe)
         
-        # Dodaj dodatkowe mapowanie dla formularza
+        # Dodatkowe mapowanie dla formularza
         if data.get('info'):
             info = data['info']
             
@@ -96,7 +95,6 @@ async def get_entity_data(
             if 'born' in info:
                 born_str = str(info['born'])
                 if 'BBY' in born_str or 'ABY' in born_str:
-                    # Parse "19 BBY" -> year=19, era=BBY
                     import re
                     match = re.search(r'(\d+)\s*(BBY|ABY)', born_str)
                     if match:
@@ -120,7 +118,7 @@ async def get_entity_data(
 async def get_planet_data(
     planet_name: str,
     universe: str = "star_wars"
-):
+) -> Dict[str, Any]:
     """Pobiera szczegółowe dane o planecie"""
     scraper_service = ScraperService()
     
@@ -134,7 +132,7 @@ async def get_planet_data(
 async def get_affiliation_data(
     affiliation_name: str,
     universe: str = "star_wars"
-):
+) -> Dict[str, Any]:
     """Pobiera dane o organizacji/afilacji"""
     scraper_service = ScraperService()
     
@@ -145,14 +143,14 @@ async def get_affiliation_data(
         raise HTTPException(status_code=404, detail=str(e))
 
 @router.post("/clear-cache")
-async def clear_wiki_cache():
+async def clear_wiki_cache() -> Dict[str, str]:
     """Czyści cache scrapowanych danych"""
     scraper_service = ScraperService()
     scraper_service.clear_cache()
     return {"message": "Cache cleared successfully"}
 
 @router.get("/canon/{universe}")
-async def get_canon_elements(universe: str = "star_wars"):
+async def get_canon_elements(universe: str = "star_wars") -> Dict[str, Any]:
     """Pobiera podstawowe kanoniczne elementy dla uniwersum"""
     scraper_service = ScraperService()
     return scraper_service.get_canon_elements(universe)

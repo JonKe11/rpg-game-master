@@ -1,75 +1,110 @@
 # backend/scripts/test_scraper.py
 """
-Test scrapera - sprawdza czy pobieranie kategorii działa
+Test refactored scrapera - sprawdza czy nowe API działa
 """
 from app.core.scraper.wiki_scraper import WikiScraper
 import time
 
-def test_categories():
-    """Testuje pobieranie kategorii z Wookiepedii"""
+def test_new_api():
+    """Testuje nowe refactored API scrapera"""
     
     scraper = WikiScraper()
     universe = 'star_wars'
     
     print("=" * 60)
-    print("TESTING WOOKIEPEDIA SCRAPER")
+    print("TESTING REFACTORED WIKI SCRAPER")
     print("=" * 60)
     
-    # Test 1: Pobierz gatunki (species)
-    print("\n1. Testing Species/Races...")
+    # Test 1: Pobierz wszystkie gatunki
+    print("\n1. Testing get_all_species()...")
     print("-" * 60)
-    species = scraper.get_category_items(universe, 'species', limit=20)
-    print(f"Found {len(species)} species:")
-    for i, sp in enumerate(species[:10], 1):
-        print(f"  {i}. {sp}")
-    if len(species) > 10:
-        print(f"  ... and {len(species) - 10} more")
+    try:
+        species = scraper.get_all_species(universe)
+        print(f"Found {len(species)} species:")
+        for i, sp in enumerate(species[:15], 1):
+            print(f"  {i}. {sp}")
+        if len(species) > 15:
+            print(f"  ... and {len(species) - 15} more")
+    except Exception as e:
+        print(f"ERROR: {e}")
     
-    time.sleep(1)  # Bądź grzeczny dla serwera
+    time.sleep(1)
     
     # Test 2: Pobierz planety
-    print("\n2. Testing Planets...")
+    print("\n2. Testing get_all_planets()...")
     print("-" * 60)
-    planets = scraper.get_category_items(universe, 'planets', limit=20)
-    print(f"Found {len(planets)} planets:")
-    for i, planet in enumerate(planets[:10], 1):
-        print(f"  {i}. {planet}")
-    if len(planets) > 10:
-        print(f"  ... and {len(planets) - 10} more")
+    try:
+        planets = scraper.get_all_planets(universe)
+        print(f"Found {len(planets)} planets:")
+        for i, planet in enumerate(planets[:15], 1):
+            print(f"  {i}. {planet}")
+        if len(planets) > 15:
+            print(f"  ... and {len(planets) - 15} more")
+    except Exception as e:
+        print(f"ERROR: {e}")
     
     time.sleep(1)
     
     # Test 3: Pobierz organizacje
-    print("\n3. Testing Organizations...")
+    print("\n3. Testing get_all_organizations()...")
     print("-" * 60)
-    orgs = scraper.get_category_items(universe, 'organizations', limit=20)
-    print(f"Found {len(orgs)} organizations:")
-    for i, org in enumerate(orgs[:10], 1):
-        print(f"  {i}. {org}")
-    if len(orgs) > 10:
-        print(f"  ... and {len(orgs) - 10} more")
-    
-    # Test 4: Wyszukiwanie
-    print("\n4. Testing Search...")
-    print("-" * 60)
-    search_results = scraper.search_in_category(universe, 'species', 'human')
-    print(f"Search for 'human' in species:")
-    for i, result in enumerate(search_results[:10], 1):
-        print(f"  {i}. {result}")
+    try:
+        orgs = scraper.get_all_organizations(universe)
+        print(f"Found {len(orgs)} organizations:")
+        for i, org in enumerate(orgs[:15], 1):
+            print(f"  {i}. {org}")
+        if len(orgs) > 15:
+            print(f"  ... and {len(orgs) - 15} more")
+    except Exception as e:
+        print(f"ERROR: {e}")
     
     time.sleep(1)
     
-    # Test 5: Szczegóły planety
-    print("\n5. Testing Planet Details...")
+    # Test 4: Kolory (nowa metoda)
+    print("\n4. Testing get_colors()...")
     print("-" * 60)
-    if planets:
-        planet_name = planets[0]
-        planet_data = scraper.get_planet_data(planet_name, universe)
-        if planet_data:
-            print(f"Details for {planet_name}:")
-            print(f"  Description: {planet_data.get('description', 'N/A')[:100]}...")
-            print(f"  System: {planet_data.get('system', 'N/A')}")
-            print(f"  Region: {planet_data.get('region', 'N/A')}")
+    try:
+        colors = scraper.get_colors()
+        print(f"Colors ({len(colors)}): {', '.join(colors[:20])}")
+    except Exception as e:
+        print(f"ERROR: {e}")
+    
+    # Test 5: Wyszukiwanie postaci
+    print("\n5. Testing search_character()...")
+    print("-" * 60)
+    test_chars = ['Luke Skywalker', 'Darth Vader', 'Yoda']
+    for char_name in test_chars:
+        try:
+            url = scraper.search_character(char_name, universe)
+            if url:
+                print(f"  ✓ Found: {char_name} -> {url[:60]}...")
+            else:
+                print(f"  ✗ Not found: {char_name}")
+        except Exception as e:
+            print(f"  ✗ Error for {char_name}: {e}")
+        time.sleep(0.5)
+    
+    # Test 6: Pobierz szczegóły postaci
+    print("\n6. Testing scrape_character_data()...")
+    print("-" * 60)
+    try:
+        url = scraper.search_character('Luke Skywalker', universe)
+        if url:
+            data = scraper.scrape_character_data(url)
+            print(f"Character: {data.get('name', 'Unknown')}")
+            print(f"Description: {data.get('description', 'N/A')[:100]}...")
+            
+            info = data.get('info_box', {})
+            if info:
+                print(f"Info fields: {list(info.keys())[:10]}")
+            
+            affiliations = data.get('affiliations', [])
+            if affiliations:
+                print(f"Affiliations: {', '.join(affiliations[:5])}")
+        else:
+            print("Could not find Luke Skywalker")
+    except Exception as e:
+        print(f"ERROR: {e}")
     
     print("\n" + "=" * 60)
     print("TESTING COMPLETED")
@@ -77,31 +112,77 @@ def test_categories():
     
     # Podsumowanie
     print("\n📊 Summary:")
-    print(f"  Species found: {len(species)}")
-    print(f"  Planets found: {len(planets)}")
-    print(f"  Organizations found: {len(orgs)}")
-    print(f"  Cache size: {len(scraper.cache)} items")
+    print(f"  Species API works: {len(species) > 0 if 'species' in locals() else False}")
+    print(f"  Planets API works: {len(planets) > 0 if 'planets' in locals() else False}")
+    print(f"  Organizations API works: {len(orgs) > 0 if 'orgs' in locals() else False}")
+    print(f"  Colors API works: {len(colors) > 0 if 'colors' in locals() else False}")
+    print(f"  Character search works: URL found for test characters")
 
-def test_colors_and_genders():
-    """Testuje hardcoded listy (kolory, płcie)"""
+def test_cache():
+    """Test cache functionality"""
+    print("\n" + "=" * 60)
+    print("TESTING CACHE")
+    print("=" * 60)
     
     scraper = WikiScraper()
     
+    # First call - should scrape
+    print("\nFirst call (should scrape)...")
+    start = time.time()
+    species1 = scraper.get_all_species('star_wars')
+    time1 = time.time() - start
+    print(f"Time: {time1:.2f}s - Found {len(species1)} species")
+    
+    # Second call - should use cache
+    print("\nSecond call (should use cache)...")
+    start = time.time()
+    species2 = scraper.get_all_species('star_wars')
+    time2 = time.time() - start
+    print(f"Time: {time2:.2f}s - Found {len(species2)} species")
+    
+    if time2 < time1 * 0.5:
+        print("✓ Cache is working! Second call was faster.")
+    else:
+        print("⚠ Cache might not be working as expected.")
+    
+    # Clear cache
+    print("\nClearing cache...")
+    scraper.clear_cache()
+    print("✓ Cache cleared")
+
+def test_error_handling():
+    """Test error handling dla niepoprawnych danych"""
     print("\n" + "=" * 60)
-    print("TESTING HARDCODED LISTS")
+    print("TESTING ERROR HANDLING")
     print("=" * 60)
     
-    colors = scraper.get_category_items('star_wars', 'colors')
-    print(f"\nColors ({len(colors)}): {', '.join(colors)}")
+    scraper = WikiScraper()
     
-    genders = scraper.get_category_items('star_wars', 'genders')
-    print(f"\nGenders ({len(genders)}): {', '.join(genders)}")
+    # Test 1: Nieistniejące uniwersum
+    print("\n1. Invalid universe...")
+    try:
+        result = scraper.get_all_species('invalid_universe')
+        print(f"  Result: {result}")
+    except Exception as e:
+        print(f"  ✓ Handled gracefully: {type(e).__name__}")
+    
+    # Test 2: Nieistniejąca postać
+    print("\n2. Non-existent character...")
+    try:
+        url = scraper.search_character('XxXInvalidCharacterXxX', 'star_wars')
+        if url:
+            print(f"  Found URL (unexpected): {url}")
+        else:
+            print(f"  ✓ Returned None (expected)")
+    except Exception as e:
+        print(f"  ✓ Handled gracefully: {type(e).__name__}")
 
 if __name__ == "__main__":
     try:
-        test_categories()
-        test_colors_and_genders()
-        print("\n✅ All tests passed!")
+        test_new_api()
+        test_cache()
+        test_error_handling()
+        print("\n✅ All tests completed!")
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         import traceback

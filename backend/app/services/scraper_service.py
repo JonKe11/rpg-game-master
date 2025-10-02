@@ -4,7 +4,7 @@ from app.core.scraper.wiki_scraper import WikiScraper
 from app.core.exceptions import NotFoundError
 
 class ScraperService:
-    """Service dla operacji scrapowania wiki"""
+    """Service dla operacji scrapowania wiki - zaktualizowany dla refactored scrapera"""
     
     def __init__(self):
         self.scraper = WikiScraper()
@@ -18,16 +18,26 @@ class ScraperService:
     ) -> List[str]:
         """
         Pobiera pełną listę elementów z kategorii
-        
-        Args:
-            universe: np. 'star_wars'
-            category: np. 'species', 'planets'
-            limit: max liczba elementów
-        
-        Returns:
-            Lista nazw elementów
+        Mapuje na nowe API scrapera
         """
-        return self.scraper.get_category_items(universe, category, limit)
+        category_map = {
+            'species': self.scraper.get_all_species,
+            'planets': self.scraper.get_all_planets,
+            'organizations': self.scraper.get_all_organizations,
+            'colors': self.scraper.get_colors,
+            'genders': lambda u: ['Male', 'Female', 'Other', 'None']
+        }
+        
+        method = category_map.get(category)
+        if not method:
+            return []
+        
+        try:
+            items = method(universe)
+            return items[:limit]
+        except Exception as e:
+            print(f"Error fetching {category}: {e}")
+            return []
     
     def search_category(
         self, 
@@ -37,16 +47,16 @@ class ScraperService:
     ) -> List[str]:
         """
         Wyszukuje w kategorii elementy pasujące do zapytania
-        
-        Args:
-            universe: np. 'star_wars'
-            category: np. 'species', 'planets'
-            query: szukana fraza
-        
-        Returns:
-            Lista pasujących elementów
         """
-        return self.scraper.search_in_category(universe, category, query)
+        all_items = self.get_category_list(universe, category)
+        query_lower = query.lower()
+        
+        matches = [
+            item for item in all_items 
+            if query_lower in item.lower()
+        ]
+        
+        return matches[:20]
     
     def get_planet_info(
         self, 
@@ -54,10 +64,22 @@ class ScraperService:
         universe: str = 'star_wars'
     ) -> Dict:
         """Pobiera szczegółowe informacje o planecie"""
-        data = self.scraper.get_planet_data(planet_name, universe)
-        if not data:
+        url = self.scraper.search_character(planet_name, universe)
+        if not url:
             raise NotFoundError("Planet", planet_name)
-        return data
+        
+        data = self.scraper.scrape_character_data(url)
+        
+        # Format jako planet data
+        return {
+            'name': planet_name,
+            'description': data.get('description', ''),
+            'system': data.get('info', {}).get('system', 'Unknown'),
+            'sector': data.get('info', {}).get('sector', 'Unknown'),
+            'region': data.get('info', {}).get('region', 'Unknown'),
+            'climate': data.get('info', {}).get('climate', 'Unknown'),
+            'url': url
+        }
     
     def get_affiliation_info(
         self, 
@@ -65,10 +87,17 @@ class ScraperService:
         universe: str = 'star_wars'
     ) -> Dict:
         """Pobiera informacje o organizacji/afilacji"""
-        data = self.scraper.get_affiliation_data(affiliation_name, universe)
-        if not data:
+        url = self.scraper.search_character(affiliation_name, universe)
+        if not url:
             raise NotFoundError("Affiliation", affiliation_name)
-        return data
+        
+        data = self.scraper.scrape_character_data(url)
+        
+        return {
+            'name': affiliation_name,
+            'description': data.get('description', ''),
+            'url': url
+        }
     
     def search_entity(
         self, 
@@ -102,42 +131,29 @@ class ScraperService:
         return self._format_wiki_data(data)
     
     def get_canon_elements(self, universe: str) -> Dict[str, List]:
-        """
-        Pobiera podstawowe kanoniczne elementy dla uniwersum
-        (cached version z najpopularniejszymi)
-        """
-        canon = {
-            'star_wars': {
-                'popular_species': [
-                    'Human', 'Twi\'lek', 'Wookiee', 'Rodian', 'Zabrak',
-                    'Mon Calamari', 'Bothan', 'Duros', 'Sullustan', 'Trandoshan'
-                ],
-                'popular_planets': [
-                    'Tatooine', 'Coruscant', 'Naboo', 'Alderaan', 'Hoth',
-                    'Endor', 'Dagobah', 'Bespin', 'Kamino', 'Mustafar'
-                ],
-                'popular_affiliations': [
-                    'Jedi Order', 'Sith', 'Galactic Republic', 'Galactic Empire',
-                    'Rebel Alliance', 'New Republic', 'First Order', 'Resistance'
-                ],
+        """Pobiera podstawowe kanoniczne elementy dla uniwersum"""
+        try:
+            species = self.scraper.get_all_species(universe)[:20]
+            planets = self.scraper.get_all_planets(universe)[:20]
+            orgs = self.scraper.get_all_organizations(universe)[:20]
+            
+            return {
+                'popular_species': species,
+                'popular_planets': planets,
+                'popular_affiliations': orgs,
                 'genders': ['Male', 'Female', 'Other', 'None'],
-                'colors': ['Blue', 'Green', 'Brown', 'Red', 'Yellow', 'Orange', 
-                          'Purple', 'Pink', 'White', 'Black', 'Gray', 'Hazel']
-            },
-            'lotr': {
-                'popular_species': ['Human', 'Elf', 'Dwarf', 'Hobbit', 'Orc', 'Ent'],
-                'popular_locations': [
-                    'Shire', 'Rivendell', 'Gondor', 'Rohan', 'Mordor', 
-                    'Moria', 'Isengard', 'Lothlórien'
-                ],
-                'popular_affiliations': [
-                    'Fellowship of the Ring', 'Kingdom of Gondor', 'Rohan',
-                    'Elves of Rivendell', 'Dwarves of Erebor'
-                ]
+                'colors': self.scraper.get_colors()
             }
-        }
-        
-        return canon.get(universe, {})
+        except Exception as e:
+            print(f"Error getting canon elements: {e}")
+            # Fallback
+            return {
+                'popular_species': ['Human'],
+                'popular_planets': ['Tatooine'],
+                'popular_affiliations': ['Jedi Order'],
+                'genders': ['Male', 'Female', 'Other', 'None'],
+                'colors': ['Blue', 'Green', 'Brown']
+            }
     
     def clear_cache(self):
         """Czyści cache"""

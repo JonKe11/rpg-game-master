@@ -14,6 +14,7 @@ from app.schemas.game_session import (
 from app.schemas.session import GameSessionResponse
 from app.services.game_master_service import GameMasterService
 from app.core.ai.adaptive_game_master import AdaptiveGameMaster
+from app.services.session_storage import SessionStorage
 
 router = APIRouter()
 
@@ -22,7 +23,7 @@ async def start_game_session(
     request: StartSessionRequest,
     db: Session = Depends(get_db),
     game_master: AdaptiveGameMaster = Depends(get_game_master),
-    storage: dict = Depends(get_session_storage)
+    storage: SessionStorage = Depends(get_session_storage)
 ):
     """Start new game session"""
     # Get character
@@ -72,7 +73,7 @@ async def process_action(
     request: SessionActionRequest,
     db: Session = Depends(get_db),
     game_master: AdaptiveGameMaster = Depends(get_game_master),
-    storage: dict = Depends(get_session_storage)
+    storage: SessionStorage = Depends(get_session_storage)
 ):
     """Process player action"""
     gm_service = GameMasterService(game_master, storage)

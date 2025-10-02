@@ -21,10 +21,10 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS
+# CORS - WAŻNE: Dodaj PRZED wszystkimi routami
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,10 +42,10 @@ async def app_exception_handler(request: Request, exc: AppException):
         }
     )
 
-# Include API routes - RAZ!
+# Include API routes
 app.include_router(api_router, prefix="/api/v1")
 
-# Root endpoint - RAZ!
+# Root endpoint
 @app.get("/")
 async def root():
     return {
@@ -54,7 +54,7 @@ async def root():
         "docs": "/docs"
     }
 
-# Health check - RAZ!
+# Health check
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
