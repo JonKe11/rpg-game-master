@@ -10,7 +10,7 @@ const api = axios.create({
   }
 });
 
-function CharacterForm({ onClose, onSuccess }) {
+function CharacterForm({ onClose, onNext }) {
   const [universe, setUniverse] = useState('star_wars');
   const [formData, setFormData] = useState({
     name: '',
@@ -40,7 +40,6 @@ function CharacterForm({ onClose, onSuccess }) {
     genders: []
   });
 
-  const [isLoading, setIsLoading] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [categoriesError, setCategoriesError] = useState(null);
   const [showRaceSuggestions, setShowRaceSuggestions] = useState(false);
@@ -75,13 +74,6 @@ function CharacterForm({ onClose, onSuccess }) {
     } catch (error) {
       console.error('Error fetching categories:', error);
       setCategoriesError('Failed to load universe data. Please try again.');
-      setCategories({
-        races: [],
-        planets: [],
-        organizations: [],
-        colors: [],
-        genders: []
-      });
     } finally {
       setLoadingCategories(false);
     }
@@ -104,25 +96,15 @@ function CharacterForm({ onClose, onSuccess }) {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
+    setFormData({ ...formData, [name]: value });
   };
 
   const handleAffiliationToggle = (affiliation) => {
-    const currentAffiliations = formData.affiliations || [];
-    if (currentAffiliations.includes(affiliation)) {
-      setFormData({
-        ...formData,
-        affiliations: currentAffiliations.filter(a => a !== affiliation)
-      });
-    } else {
-      setFormData({
-        ...formData,
-        affiliations: [...currentAffiliations, affiliation]
-      });
-    }
+    const current = formData.affiliations || [];
+    const updated = current.includes(affiliation)
+      ? current.filter(a => a !== affiliation)
+      : [...current, affiliation];
+    setFormData({ ...formData, affiliations: updated });
   };
 
   const getFilteredRaces = () => {
@@ -157,35 +139,32 @@ function CharacterForm({ onClose, onSuccess }) {
     });
   };
 
-  const handleSubmit = async (e) => {
+  const handleNext = (e) => {
     e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      const submitData = {
-        ...formData,
-        level: parseInt(formData.level) || 1,
-        height: formData.height ? parseFloat(formData.height) : null,
-        mass: formData.mass ? parseFloat(formData.mass) : null,
-        born_year: formData.born_year ? parseInt(formData.born_year) : null,
-      };
-
-      await api.post('/characters/', submitData);
-      onSuccess();
-      onClose();
-    } catch (error) {
-      console.error('Error creating character:', error);
-      alert('Failed to create character. Check console for details.');
-    } finally {
-      setIsLoading(false);
-    }
+    
+    const processedData = {
+      ...formData,
+      level: parseInt(formData.level) || 1,
+      height: formData.height ? parseFloat(formData.height) : null,
+      mass: formData.mass ? parseFloat(formData.mass) : null,
+      born_year: formData.born_year ? parseInt(formData.born_year) : null,
+      cybernetics: formData.cybernetics 
+        ? formData.cybernetics.split(',').map(s => s.trim()).filter(s => s)
+        : [],
+      affiliations: formData.affiliations || [],
+    };
+    
+    onNext(processedData);
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
       <div className="bg-gray-800 rounded-lg p-6 max-w-4xl w-full mx-4 my-8">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-blue-400">Create New Character</h2>
+          <div>
+            <h2 className="text-2xl font-bold text-blue-400">Create New Character</h2>
+            <p className="text-sm text-gray-400 mt-1">Step 1 of 3: Basic Information</p>
+          </div>
           <div className="flex gap-2 items-center">
             <WikiImportButton 
               universe={universe}
@@ -218,7 +197,8 @@ function CharacterForm({ onClose, onSuccess }) {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleNext} className="space-y-6">
+          {/* Universe selector */}
           <div>
             <label className="block text-sm font-medium mb-2">Universe *</label>
             <select
@@ -227,13 +207,12 @@ function CharacterForm({ onClose, onSuccess }) {
               className="w-full px-3 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {universeOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
           </div>
 
+          {/* Name and Level */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2">Name *</label>
@@ -246,7 +225,6 @@ function CharacterForm({ onClose, onSuccess }) {
                 className="w-full px-3 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium mb-2">Level</label>
               <input
@@ -262,6 +240,7 @@ function CharacterForm({ onClose, onSuccess }) {
 
           {universe === 'star_wars' && (
             <>
+              {/* Species */}
               <div className="relative">
                 <label className="block text-sm font-medium mb-2">
                   Species {categories.races.length > 0 && `(${categories.races.length} available)`}
@@ -294,6 +273,7 @@ function CharacterForm({ onClose, onSuccess }) {
                 )}
               </div>
 
+              {/* Homeworld */}
               <div className="relative">
                 <label className="block text-sm font-medium mb-2">
                   Homeworld {categories.planets.length > 0 && `(${categories.planets.length} available)`}
@@ -326,6 +306,7 @@ function CharacterForm({ onClose, onSuccess }) {
                 )}
               </div>
 
+              {/* Birth Year and Era */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
                   <label className="block text-sm font-medium mb-2">Birth Year</label>
@@ -352,6 +333,7 @@ function CharacterForm({ onClose, onSuccess }) {
                 </div>
               </div>
 
+              {/* Gender and Class */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Gender</label>
@@ -367,7 +349,6 @@ function CharacterForm({ onClose, onSuccess }) {
                     ))}
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium mb-2">Class/Occupation</label>
                   <input
@@ -381,6 +362,7 @@ function CharacterForm({ onClose, onSuccess }) {
                 </div>
               </div>
 
+              {/* Height and Mass */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Height (cm)</label>
@@ -392,7 +374,6 @@ function CharacterForm({ onClose, onSuccess }) {
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium mb-2">Mass (kg)</label>
                   <input
@@ -405,6 +386,7 @@ function CharacterForm({ onClose, onSuccess }) {
                 </div>
               </div>
 
+              {/* Colors */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Skin Color</label>
@@ -423,7 +405,6 @@ function CharacterForm({ onClose, onSuccess }) {
                     ))}
                   </datalist>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium mb-2">Eye Color</label>
                   <input
@@ -441,7 +422,6 @@ function CharacterForm({ onClose, onSuccess }) {
                     ))}
                   </datalist>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium mb-2">Hair Color</label>
                   <input
@@ -461,6 +441,7 @@ function CharacterForm({ onClose, onSuccess }) {
                 </div>
               </div>
 
+              {/* Cybernetics */}
               <div>
                 <label className="block text-sm font-medium mb-2">Cybernetics</label>
                 <input
@@ -468,11 +449,12 @@ function CharacterForm({ onClose, onSuccess }) {
                   name="cybernetics"
                   value={formData.cybernetics}
                   onChange={handleInputChange}
-                  placeholder="None or describe"
+                  placeholder="None or describe (comma separated)"
                   className="w-full px-3 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
+              {/* Affiliations */}
               <div>
                 <label className="block text-sm font-medium mb-2">
                   Affiliations {categories.organizations.length > 0 && `(${categories.organizations.length} available)`}
@@ -480,7 +462,7 @@ function CharacterForm({ onClose, onSuccess }) {
                 <div className="bg-gray-700 rounded-lg p-4 max-h-48 overflow-y-auto">
                   {categories.organizations.length === 0 ? (
                     <p className="text-gray-400 text-sm">
-                      {loadingCategories ? 'Loading organizations...' : 'No organizations loaded. You can still submit the form.'}
+                      {loadingCategories ? 'Loading organizations...' : 'No organizations loaded.'}
                     </p>
                   ) : (
                     <div className="grid grid-cols-2 gap-2">
@@ -502,6 +484,7 @@ function CharacterForm({ onClose, onSuccess }) {
             </>
           )}
 
+          {/* Description */}
           <div>
             <label className="block text-sm font-medium mb-2">Description / Backstory</label>
             <textarea
@@ -514,20 +497,20 @@ function CharacterForm({ onClose, onSuccess }) {
             />
           </div>
 
+          {/* Buttons */}
           <div className="flex gap-3 pt-4 border-t border-gray-700">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-semibold transition duration-200 disabled:opacity-50"
-            >
-              {isLoading ? 'Creating...' : 'Create Character'}
-            </button>
             <button
               type="button"
               onClick={onClose}
-              className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold transition duration-200"
+              className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold transition"
             >
               Cancel
+            </button>
+            <button
+              type="submit"
+              className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition flex-1"
+            >
+              Next: Attributes
             </button>
           </div>
         </form>
