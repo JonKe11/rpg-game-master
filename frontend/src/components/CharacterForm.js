@@ -58,9 +58,9 @@ function CharacterForm({ onClose, onNext }) {
     
     try {
       const [speciesRes, planetsRes, orgsRes, canonRes] = await Promise.all([
-        api.get(`/wiki/categories/${universe}/species?limit=100`),
-        api.get(`/wiki/categories/${universe}/planets?limit=100`),
-        api.get(`/wiki/categories/${universe}/organizations?limit=50`),
+        api.get(`/wiki/categories/${universe}/species?limit=2256`),
+        api.get(`/wiki/categories/${universe}/planets?limit=6204`),
+        api.get(`/wiki/categories/${universe}/organizations?limit=7851`),
         api.get(`/wiki/canon/${universe}`)
       ]);
 
@@ -257,7 +257,7 @@ function CharacterForm({ onClose, onNext }) {
                 />
                 {showRaceSuggestions && getFilteredRaces().length > 0 && (
                   <div className="absolute z-10 w-full mt-1 bg-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {getFilteredRaces().slice(0, 20).map(race => (
+                    {getFilteredRaces().slice(0, 581).map(race => (
                       <div
                         key={race}
                         onClick={() => {
@@ -290,7 +290,7 @@ function CharacterForm({ onClose, onNext }) {
                 />
                 {showPlanetSuggestions && getFilteredPlanets().length > 0 && (
                   <div className="absolute z-10 w-full mt-1 bg-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {getFilteredPlanets().slice(0, 20).map(planet => (
+                    {getFilteredPlanets().slice(0, 6144).map(planet => (
                       <div
                         key={planet}
                         onClick={() => {

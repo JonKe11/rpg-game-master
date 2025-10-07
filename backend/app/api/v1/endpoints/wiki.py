@@ -22,7 +22,7 @@ async def get_category_items(
     universe: str,
     category: str,
     search: str = Query(None, description="Search query to filter results"),
-    limit: int = Query(200, ge=1, le=500)
+    limit: int = Query(200, ge=1, le=20000)
 ):
     """Pobiera listę elementów z danej kategorii wiki"""
     scraper_service = ScraperService()

@@ -36,18 +36,51 @@ class WookieepediaParser(BaseParser):
             'affiliations': self._parse_affiliations(soup)
         }
     
+    
+    
+    
     def find_next_page_url(self, soup: BeautifulSoup, base_url: str) -> Optional[str]:
         """Znajduje link do następnej strony kategorii"""
-        # Nowa struktura
+        
+        print(f"  🔍 Searching for next page link...")
+        
+        # Metoda 1: Nowa struktura Fandom
         next_link = soup.find('a', class_='category-page__pagination-next')
         if next_link and next_link.get('href'):
-            return base_url + next_link['href']
+            href = next_link['href']
+            url = base_url + href if href.startswith('/') else href
+            print(f"  ✓ Found (method 1): {url}")
+            return url
         
-        # Stara struktura
-        next_link = soup.find('a', string=re.compile('next', re.I))
+        # Metoda 2: MediaWiki standard
+        next_link = soup.find('a', class_='mw-nextlink')
         if next_link and next_link.get('href'):
-            return base_url + next_link['href']
+            href = next_link['href']
+            url = base_url + href if href.startswith('/') else href
+            print(f"  ✓ Found (method 2): {url}")
+            return url
         
+        # Metoda 3: Div paginacji
+        pagination_div = soup.find('div', {'id': 'mw-pages'})
+        if pagination_div:
+            for link in pagination_div.find_all('a'):
+                text = link.text.lower()
+                if 'next' in text:
+                    href = link.get('href')
+                    if href:
+                        url = base_url + href if href.startswith('/') else href
+                        print(f"  ✓ Found (method 3): {url}")
+                        return url
+        
+        # Metoda 4: Parametr pagefrom
+        for link in soup.find_all('a', href=True):
+            href = link['href']
+            if 'pagefrom=' in href.lower():
+                url = base_url + href if href.startswith('/') else href
+                print(f"  ✓ Found (method 4): {url}")
+                return url
+        
+        print(f"  ✗ No next page link found")
         return None
     
     def _extract_from_new_structure(self, div) -> List[str]:
