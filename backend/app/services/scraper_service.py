@@ -70,7 +70,6 @@ class ScraperService:
         
         data = self.scraper.scrape_character_data(url)
         
-        # Format jako planet data
         return {
             'name': planet_name,
             'description': data.get('description', ''),
@@ -146,7 +145,6 @@ class ScraperService:
             }
         except Exception as e:
             print(f"Error getting canon elements: {e}")
-            # Fallback
             return {
                 'popular_species': ['Human'],
                 'popular_planets': ['Tatooine'],

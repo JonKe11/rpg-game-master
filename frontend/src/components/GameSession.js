@@ -17,7 +17,6 @@ function GameSession({ character, onClose }) {
   const [isStarting, setIsStarting] = useState(true);
   const messagesEndRef = useRef(null);
 
-  // Auto-scroll do końca czatu
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -26,47 +25,70 @@ function GameSession({ character, onClose }) {
     scrollToBottom();
   }, [messages]);
 
-  // Rozpocznij sesję przy montowaniu komponentu
   useEffect(() => {
     startSession();
   }, []);
 
   const startSession = async () => {
+    if (!character?.id) {
+      console.error('No character ID provided');
+      alert('Error: Invalid character data');
+      onClose();
+      return;
+    }
+
     try {
       setIsStarting(true);
       const response = await api.post('/game-sessions/start', {
-        character_id: character.id || 1,
-        title: `Przygoda ${character.name}`
+        character_id: character.id,
+        title: `Adventure of ${character.name}`
       });
       
-      // Popraw na:
-if (response.data.intro) {
-  setMessages([{
-    type: 'narration',
-    message: response.data.intro.message || response.data.intro,
-    timestamp: response.data.intro.timestamp || new Date().toISOString()
-  }]);
-} else {
-  // Fallback
-  setMessages([{
-    type: 'narration',
-    message: "Rozpoczynacie przygodę...",
-    timestamp: new Date().toISOString()
-  }]);
-}
+      // Save session data
+      setSession({
+        session_id: response.data.session_id,
+        character_id: character.id,
+        universe: character.universe
+      });
+
+      // Add intro message
+      const introMessage = response.data.intro;
+      if (introMessage) {
+        setMessages([{
+          type: 'narration',
+          message: introMessage.message || introMessage,
+          timestamp: introMessage.timestamp || new Date().toISOString()
+        }]);
+      } else {
+        // Fallback intro
+        setMessages([{
+          type: 'narration',
+          message: `Welcome, ${character.name}! Your adventure in ${character.universe.replace('_', ' ')} begins...`,
+          timestamp: new Date().toISOString()
+        }]);
+      }
       
       setIsStarting(false);
     } catch (error) {
-      console.error('Błąd podczas rozpoczynania sesji:', error);
+      console.error('Error starting session:', error);
       setIsStarting(false);
+      alert('Failed to start game session. Please try again.');
+      onClose();
     }
   };
 
   const sendAction = async (e) => {
     e.preventDefault();
-    if (!inputMessage.trim() || !session) return;
+    
+    if (!inputMessage.trim()) return;
+    
+    if (!session?.session_id) {
+      console.error('No active session');
+      alert('Error: No active game session');
+      return;
+    }
 
-    // Dodaj wiadomość gracza do czatu
+    // Add player message
     const playerMessage = {
       type: 'player',
       message: inputMessage,
@@ -74,31 +96,29 @@ if (response.data.intro) {
     };
     setMessages(prev => [...prev, playerMessage]);
     
-    // Wyczyść input
     const action = inputMessage;
     setInputMessage('');
     setIsLoading(true);
 
     try {
-      // Wyślij akcję do AI
       const response = await api.post('/game-sessions/action', {
         action: action,
         session_id: session.session_id
       });
 
-      // Dodaj odpowiedź AI do czatu
+      // Add AI response
       const aiMessage = {
-        type: response.data.type,
+        type: response.data.type || 'narration',
         message: response.data.message,
-        timestamp: response.data.timestamp
+        timestamp: response.data.timestamp || new Date().toISOString()
       };
       setMessages(prev => [...prev, aiMessage]);
 
     } catch (error) {
-      console.error('Błąd podczas wysyłania akcji:', error);
+      console.error('Error processing action:', error);
       setMessages(prev => [...prev, {
         type: 'error',
-        message: 'Wystąpił błąd podczas przetwarzania akcji.',
+        message: 'An error occurred while processing your action. Please try again.',
         timestamp: new Date().toISOString()
       }]);
     } finally {
@@ -112,7 +132,6 @@ if (response.data.intro) {
         params: { dice_type: diceType }
       });
       
-      // Dodaj wynik rzutu do czatu
       const diceMessage = {
         type: 'dice',
         message: response.data.message,
@@ -122,22 +141,25 @@ if (response.data.intro) {
       };
       setMessages(prev => [...prev, diceMessage]);
     } catch (error) {
-      console.error('Błąd podczas rzutu kością:', error);
+      console.error('Error rolling dice:', error);
     }
   };
 
   const endSession = async () => {
-    if (!session) return;
+    if (!session?.session_id) {
+      onClose();
+      return;
+    }
     
     try {
       await api.post(`/game-sessions/${session.session_id}/end`);
-      onClose();
     } catch (error) {
-      console.error('Błąd podczas kończenia sesji:', error);
+      console.error('Error ending session:', error);
+    } finally {
+      onClose();
     }
   };
 
-  // Funkcja do renderowania wiadomości w zależności od typu
   const renderMessage = (msg, index) => {
     const messageClass = {
       'player': 'bg-blue-900 ml-auto',
@@ -152,35 +174,35 @@ if (response.data.intro) {
     };
 
     const typeLabel = {
-      'player': '🎮 Ty',
+      'player': '🎮 You',
       'narration': '📖 Narrator',
       'dialogue': '💬 Dialog',
-      'combat': '⚔️ Walka',
-      'observation': '👁️ Obserwacja',
-      'movement': '🚶 Ruch',
-      'event': '⚡ Wydarzenie',
-      'dice': '🎲 Rzut kością',
-      'error': '❌ Błąd'
+      'combat': '⚔️ Combat',
+      'observation': '👁️ Observation',
+      'movement': '🚶 Movement',
+      'event': '⚡ Event',
+      'dice': '🎲 Dice Roll',
+      'error': '❌ Error'
     };
 
     return (
       <div 
         key={index} 
         className={`p-3 rounded-lg mb-3 max-w-3xl ${messageClass[msg.type] || 'bg-gray-700'} ${
-          msg.type === 'player' ? 'text-right' : ''
+          msg.type === 'player' ? 'ml-auto text-right' : ''
         }`}
       >
         <div className="text-xs text-gray-400 mb-1">
           {typeLabel[msg.type] || msg.type}
-          {msg.timestamp && ` • ${new Date(msg.timestamp).toLocaleTimeString('pl-PL')}`}
+          {msg.timestamp && ` • ${new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`}
         </div>
-        <div className="text-white">
+        <div className="text-white whitespace-pre-wrap">
           {msg.message}
           {msg.critical && (
             <span className={`ml-2 font-bold ${
               msg.critical === 'success' ? 'text-green-400' : 'text-red-400'
             }`}>
-              {msg.critical === 'success' ? '💥 Krytyczny sukces!' : '💀 Krytyczna porażka!'}
+              {msg.critical === 'success' ? '💥 Critical Success!' : '💀 Critical Failure!'}
             </span>
           )}
         </div>
@@ -192,7 +214,12 @@ if (response.data.intro) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
         <div className="bg-gray-800 rounded-lg p-8">
-          <div className="text-white text-xl">Rozpoczynam sesję...</div>
+          <div className="text-white text-xl mb-4">Starting game session...</div>
+          <div className="animate-pulse flex space-x-2 justify-center">
+            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+          </div>
         </div>
       </div>
     );
@@ -201,21 +228,21 @@ if (response.data.intro) {
   return (
     <div className="fixed inset-0 bg-gray-900 flex flex-col z-50">
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-4">
+      <div className="bg-gray-800 border-b border-gray-700 p-4 flex-shrink-0">
         <div className="container mx-auto flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-bold text-blue-400">
-              Sesja RPG - {character.name}
+              RPG Session - {character.name}
             </h2>
             <p className="text-gray-400">
-              {character.universe.replace('_', ' ')} • Level {character.level} {character.class_type}
+              {character.universe.replace('_', ' ')} • Level {character.level} {character.class_type || 'Adventurer'}
             </p>
           </div>
           <button
             onClick={endSession}
             className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-semibold transition duration-200"
           >
-            Zakończ Sesję
+            End Session
           </button>
         </div>
       </div>
@@ -226,7 +253,7 @@ if (response.data.intro) {
           {messages.map((msg, index) => renderMessage(msg, index))}
           {isLoading && (
             <div className="text-center text-gray-400 italic">
-              Mistrz Gry myśli...
+              <span className="inline-block animate-pulse">Game Master is thinking...</span>
             </div>
           )}
           <div ref={messagesEndRef} />
@@ -234,76 +261,44 @@ if (response.data.intro) {
       </div>
 
       {/* Input Area */}
-      <div className="bg-gray-800 border-t border-gray-700 p-4">
+      <div className="bg-gray-800 border-t border-gray-700 p-4 flex-shrink-0">
         <div className="container mx-auto max-w-4xl">
-          {/* Przyciski kości */}
-          <div className="flex gap-2 mb-3">
-            <button
-              onClick={() => rollDice('d4')}
-              className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition"
-            >
-              🎲 d4
-            </button>
-            <button
-              onClick={() => rollDice('d6')}
-              className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition"
-            >
-              🎲 d6
-            </button>
-            <button
-              onClick={() => rollDice('d8')}
-              className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition"
-            >
-              🎲 d8
-            </button>
-            <button
-              onClick={() => rollDice('d10')}
-              className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition"
-            >
-              🎲 d10
-            </button>
-            <button
-              onClick={() => rollDice('d12')}
-              className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition"
-            >
-              🎲 d12
-            </button>
-            <button
-              onClick={() => rollDice('d20')}
-              className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition"
-            >
-              🎲 d20
-            </button>
-            <button
-              onClick={() => rollDice('d100')}
-              className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition"
-            >
-              🎲 d100
-            </button>
+          {/* Dice buttons */}
+          <div className="flex gap-2 mb-3 flex-wrap">
+            {['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'].map(dice => (
+              <button
+                key={dice}
+                onClick={() => rollDice(dice)}
+                className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition"
+                disabled={isLoading}
+              >
+                🎲 {dice}
+              </button>
+            ))}
           </div>
           
-          {/* Formularz wiadomości */}
+          {/* Message input */}
           <form onSubmit={sendAction} className="flex gap-3">
             <input
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Co robisz? (np. 'rozglądam się', 'idę do karczmy', 'rozmawiam z NPC')"
+              placeholder="What do you do? (e.g., 'I look around', 'I go to the tavern', 'I attack')"
               className="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               disabled={isLoading}
             />
             <button
               type="submit"
               disabled={isLoading || !inputMessage.trim()}
-              className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition duration-200 disabled:opacity-50"
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-semibold transition duration-200"
             >
-              Wyślij
+              {isLoading ? 'Sending...' : 'Send'}
             </button>
           </form>
           
-          {/* Podpowiedzi */}
+          {/* Action hints */}
           <div className="mt-2 text-xs text-gray-400">
-            Przykładowe akcje: "rozglądam się po pomieszczeniu", "idę do tawerny", "pytam o plotki", "atakuję goblina"
+            💡 Try: "I look around the room", "I approach the bartender", "I ask about rumors", "I attack the goblin"
           </div>
         </div>
       </div>

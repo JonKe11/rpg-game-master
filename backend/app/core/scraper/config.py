@@ -1,13 +1,17 @@
 # backend/app/core/scraper/config.py
 from dataclasses import dataclass
-from datetime import timedelta
 
 @dataclass
 class ScraperConfig:
-    """Konfiguracja scrapera - wszystkie magic numbers w jednym miejscu"""
-    request_delay: float = 0.5  # sekundy między requestami
-    cache_validity: timedelta = timedelta(hours=24)
-    request_timeout: int = 15
-    max_category_items: int = 1000
-    max_retries: int = 3
-    max_pages_per_category: int = 50
+    """Configuration for wiki scraper"""
+    
+    # Limits - BARDZO WYSOKIE aby nie obcinać Canon articles
+    max_category_items: int = 50000  # ✅ ZWIĘKSZONE z 10000 do 50000
+    max_pages_per_category: int = 500  # ✅ ZWIĘKSZONE z 200 do 500
+    
+    # Rate limiting
+    request_delay: float = 0.05  # seconds (szybsze)
+    request_timeout: int = 30  # seconds
+    
+    # Recursion
+    max_subcategory_depth: int = 6  # ✅ ZWIĘKSZONE z 5 do 6

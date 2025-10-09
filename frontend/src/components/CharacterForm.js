@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import WikiImportButton from './WikiImportButton';
+import AutocompleteField from './AutocompleteField';
 
 const api = axios.create({
   baseURL: 'http://localhost:8000/api/v1',
@@ -42,8 +43,6 @@ function CharacterForm({ onClose, onNext }) {
 
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [categoriesError, setCategoriesError] = useState(null);
-  const [showRaceSuggestions, setShowRaceSuggestions] = useState(false);
-  const [showPlanetSuggestions, setShowPlanetSuggestions] = useState(false);
 
   const universeOptions = [
     { value: 'star_wars', label: 'Star Wars' },
@@ -58,9 +57,9 @@ function CharacterForm({ onClose, onNext }) {
     
     try {
       const [speciesRes, planetsRes, orgsRes, canonRes] = await Promise.all([
-        api.get(`/wiki/categories/${universe}/species?limit=2256`),
-        api.get(`/wiki/categories/${universe}/planets?limit=6204`),
-        api.get(`/wiki/categories/${universe}/organizations?limit=7851`),
+        api.get(`/wiki/categories/${universe}/species?limit=20000`),
+        api.get(`/wiki/categories/${universe}/planets?limit=20000`),
+        api.get(`/wiki/categories/${universe}/organizations?limit=20000`),
         api.get(`/wiki/canon/${universe}`)
       ]);
 
@@ -73,7 +72,16 @@ function CharacterForm({ onClose, onNext }) {
       });
     } catch (error) {
       console.error('Error fetching categories:', error);
-      setCategoriesError('Failed to load universe data. Please try again.');
+      setCategoriesError('Failed to load universe data. Using fallback data.');
+      
+      // Fallback data
+      setCategories({
+        races: ['Human', "Twi'lek", 'Wookiee', 'Rodian', 'Zabrak'],
+        planets: ['Tatooine', 'Coruscant', 'Naboo', 'Endor', 'Hoth'],
+        organizations: ['Jedi Order', 'Sith', 'Galactic Empire', 'Rebel Alliance'],
+        colors: ['Blue', 'Green', 'Brown', 'Black', 'Blonde', 'Red', 'White', 'Gray'],
+        genders: ['Male', 'Female', 'Other', 'None']
+      });
     } finally {
       setLoadingCategories(false);
     }
@@ -81,7 +89,7 @@ function CharacterForm({ onClose, onNext }) {
 
   useEffect(() => {
     fetchCategories();
-  }, [fetchCategories]);
+  }, [universe]);
 
   const handleUniverseChange = (newUniverse) => {
     setUniverse(newUniverse);
@@ -99,26 +107,20 @@ function CharacterForm({ onClose, onNext }) {
     setFormData({ ...formData, [name]: value });
   };
 
-  const handleAffiliationToggle = (affiliation) => {
-    const current = formData.affiliations || [];
-    const updated = current.includes(affiliation)
-      ? current.filter(a => a !== affiliation)
-      : [...current, affiliation];
-    setFormData({ ...formData, affiliations: updated });
+  const handleAddAffiliation = (affiliation) => {
+    if (affiliation && !formData.affiliations.includes(affiliation)) {
+      setFormData({
+        ...formData,
+        affiliations: [...formData.affiliations, affiliation]
+      });
+    }
   };
 
-  const getFilteredRaces = () => {
-    if (!formData.race) return categories.races;
-    return categories.races.filter(race => 
-      race.toLowerCase().includes(formData.race.toLowerCase())
-    );
-  };
-
-  const getFilteredPlanets = () => {
-    if (!formData.homeworld) return categories.planets;
-    return categories.planets.filter(planet => 
-      planet.toLowerCase().includes(formData.homeworld.toLowerCase())
-    );
+  const handleRemoveAffiliation = (affiliation) => {
+    setFormData({
+      ...formData,
+      affiliations: formData.affiliations.filter(a => a !== affiliation)
+    });
   };
 
   const handleImport = (wikiData) => {
@@ -159,7 +161,7 @@ function CharacterForm({ onClose, onNext }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-      <div className="bg-gray-800 rounded-lg p-6 max-w-4xl w-full mx-4 my-8">
+      <div className="bg-gray-800 rounded-lg p-6 max-w-4xl w-full mx-4 my-8 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-2xl font-bold text-blue-400">Create New Character</h2>
@@ -186,11 +188,11 @@ function CharacterForm({ onClose, onNext }) {
         )}
 
         {categoriesError && (
-          <div className="bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded mb-4 flex items-center justify-between">
+          <div className="bg-yellow-900 border border-yellow-700 text-yellow-200 px-4 py-3 rounded mb-4 flex items-center justify-between">
             <span>{categoriesError}</span>
             <button
               onClick={fetchCategories}
-              className="bg-red-700 hover:bg-red-600 px-3 py-1 rounded text-sm transition"
+              className="bg-yellow-700 hover:bg-yellow-600 px-3 py-1 rounded text-sm transition"
             >
               Retry
             </button>
@@ -241,70 +243,22 @@ function CharacterForm({ onClose, onNext }) {
           {universe === 'star_wars' && (
             <>
               {/* Species */}
-              <div className="relative">
-                <label className="block text-sm font-medium mb-2">
-                  Species {categories.races.length > 0 && `(${categories.races.length} available)`}
-                </label>
-                <input
-                  type="text"
-                  name="race"
-                  value={formData.race}
-                  onChange={handleInputChange}
-                  onFocus={() => setShowRaceSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowRaceSuggestions(false), 200)}
-                  placeholder="Type to search or enter manually..."
-                  className="w-full px-3 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                {showRaceSuggestions && getFilteredRaces().length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {getFilteredRaces().slice(0, 581).map(race => (
-                      <div
-                        key={race}
-                        onClick={() => {
-                          setFormData({...formData, race});
-                          setShowRaceSuggestions(false);
-                        }}
-                        className="px-3 py-2 hover:bg-gray-600 cursor-pointer"
-                      >
-                        {race}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <AutocompleteField
+                label={`Species ${categories.races.length > 0 ? `(${categories.races.length} available)` : ''}`}
+                value={formData.race}
+                onChange={(value) => setFormData({...formData, race: value})}
+                suggestions={categories.races}
+                placeholder="Type to search or enter manually..."
+              />
 
               {/* Homeworld */}
-              <div className="relative">
-                <label className="block text-sm font-medium mb-2">
-                  Homeworld {categories.planets.length > 0 && `(${categories.planets.length} available)`}
-                </label>
-                <input
-                  type="text"
-                  name="homeworld"
-                  value={formData.homeworld}
-                  onChange={handleInputChange}
-                  onFocus={() => setShowPlanetSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowPlanetSuggestions(false), 200)}
-                  placeholder="Type to search or enter manually..."
-                  className="w-full px-3 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                {showPlanetSuggestions && getFilteredPlanets().length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {getFilteredPlanets().slice(0, 6144).map(planet => (
-                      <div
-                        key={planet}
-                        onClick={() => {
-                          setFormData({...formData, homeworld: planet});
-                          setShowPlanetSuggestions(false);
-                        }}
-                        className="px-3 py-2 hover:bg-gray-600 cursor-pointer"
-                      >
-                        {planet}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <AutocompleteField
+                label={`Homeworld ${categories.planets.length > 0 ? `(${categories.planets.length} available)` : ''}`}
+                value={formData.homeworld}
+                onChange={(value) => setFormData({...formData, homeworld: value})}
+                suggestions={categories.planets}
+                placeholder="Type to search or enter manually..."
+              />
 
               {/* Birth Year and Era */}
               <div className="grid grid-cols-3 gap-4">
@@ -371,6 +325,7 @@ function CharacterForm({ onClose, onNext }) {
                     name="height"
                     value={formData.height}
                     onChange={handleInputChange}
+                    placeholder="e.g. 172"
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -381,6 +336,7 @@ function CharacterForm({ onClose, onNext }) {
                     name="mass"
                     value={formData.mass}
                     onChange={handleInputChange}
+                    placeholder="e.g. 77"
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -388,57 +344,27 @@ function CharacterForm({ onClose, onNext }) {
 
               {/* Colors */}
               <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Skin Color</label>
-                  <input
-                    type="text"
-                    name="skin_color"
-                    value={formData.skin_color}
-                    onChange={handleInputChange}
-                    list="skin-colors"
-                    placeholder="Enter or select..."
-                    className="w-full px-3 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <datalist id="skin-colors">
-                    {categories.colors.map(color => (
-                      <option key={color} value={color} />
-                    ))}
-                  </datalist>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Eye Color</label>
-                  <input
-                    type="text"
-                    name="eye_color"
-                    value={formData.eye_color}
-                    onChange={handleInputChange}
-                    list="eye-colors"
-                    placeholder="Enter or select..."
-                    className="w-full px-3 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <datalist id="eye-colors">
-                    {categories.colors.map(color => (
-                      <option key={color} value={color} />
-                    ))}
-                  </datalist>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Hair Color</label>
-                  <input
-                    type="text"
-                    name="hair_color"
-                    value={formData.hair_color}
-                    onChange={handleInputChange}
-                    list="hair-colors"
-                    placeholder="Enter or select..."
-                    className="w-full px-3 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <datalist id="hair-colors">
-                    {categories.colors.map(color => (
-                      <option key={color} value={color} />
-                    ))}
-                  </datalist>
-                </div>
+                <AutocompleteField
+                  label="Skin Color"
+                  value={formData.skin_color}
+                  onChange={(value) => setFormData({...formData, skin_color: value})}
+                  suggestions={categories.colors}
+                  placeholder="Enter or select..."
+                />
+                <AutocompleteField
+                  label="Eye Color"
+                  value={formData.eye_color}
+                  onChange={(value) => setFormData({...formData, eye_color: value})}
+                  suggestions={categories.colors}
+                  placeholder="Enter or select..."
+                />
+                <AutocompleteField
+                  label="Hair Color"
+                  value={formData.hair_color}
+                  onChange={(value) => setFormData({...formData, hair_color: value})}
+                  suggestions={categories.colors}
+                  placeholder="Enter or select..."
+                />
               </div>
 
               {/* Cybernetics */}
@@ -452,34 +378,49 @@ function CharacterForm({ onClose, onNext }) {
                   placeholder="None or describe (comma separated)"
                   className="w-full px-3 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                <p className="text-xs text-gray-400 mt-1">
+                  Example: Cybernetic hand, Neural implant, Prosthetic leg
+                </p>
               </div>
 
-              {/* Affiliations */}
+              {/* Affiliations - FIXED: Autocomplete instead of 7851 checkboxes! */}
               <div>
                 <label className="block text-sm font-medium mb-2">
                   Affiliations {categories.organizations.length > 0 && `(${categories.organizations.length} available)`}
                 </label>
-                <div className="bg-gray-700 rounded-lg p-4 max-h-48 overflow-y-auto">
-                  {categories.organizations.length === 0 ? (
-                    <p className="text-gray-400 text-sm">
-                      {loadingCategories ? 'Loading organizations...' : 'No organizations loaded.'}
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      {categories.organizations.map(affiliation => (
-                        <label key={affiliation} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-600 p-2 rounded">
-                          <input
-                            type="checkbox"
-                            checked={formData.affiliations.includes(affiliation)}
-                            onChange={() => handleAffiliationToggle(affiliation)}
-                            className="form-checkbox h-4 w-4 text-blue-600"
-                          />
-                          <span className="text-sm">{affiliation}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <AutocompleteField
+                  label=""
+                  value=""
+                  onChange={handleAddAffiliation}
+                  suggestions={categories.organizations}
+                  placeholder="Type to search and add organizations..."
+                  clearOnSelect={true}
+                />
+                
+                {/* Display selected affiliations */}
+                {formData.affiliations.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {formData.affiliations.map((affiliation, idx) => (
+                      <span
+                        key={idx}
+                        className="bg-blue-700 px-3 py-1 rounded-full text-sm flex items-center gap-2"
+                      >
+                        {affiliation}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAffiliation(affiliation)}
+                          className="text-red-400 hover:text-red-300 font-bold"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                
+                <p className="text-xs text-gray-400 mt-2">
+                  💡 Popular: Jedi Order, Galactic Empire, Rebel Alliance, Mandalorians
+                </p>
               </div>
             </>
           )}
@@ -510,7 +451,7 @@ function CharacterForm({ onClose, onNext }) {
               type="submit"
               className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition flex-1"
             >
-              Next: Attributes
+              Next: Attributes →
             </button>
           </div>
         </form>
