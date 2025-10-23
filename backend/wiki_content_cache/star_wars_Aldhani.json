@@ -1,0 +1,28 @@
+{
+  "title": "Aldhani",
+  "universe": "star_wars",
+  "cached_at": "2025-10-13T20:40:03.735890",
+  "content": {
+    "name": "Aldhani",
+    "description": "Aldhani\n\n\nAstrographical information\n\nRegion\nNew TerritoriesOuter Rim Territories\n\n\nSector\nCademimu sector\n\n\nSystem\nAldhani system\n\n\nGrid square\nM-6\n\n\nMoons\nAt least 2\n\n\nTrade routes\nCelanon Spur\n\n\n\nPhysical information\n\nAtmosphere\nType I (breathable) (5 BBY)\n\n\nClimate\nTemperate\n\n\nTerrain\nGrassy highlandsMountainsValleys\n\n\nPoints of interest\nHighlandsAldhani rebel infiltration team's campLowlandsEnterprise ZoneStone ValleyAkti AmaughAldhani damNasma BraniNasma KlainTemple PathAlkenzi Air Base\n\n\n",
+    "biography": "",
+    "abilities": [],
+    "image_url": "https://static.wikia.nocookie.net/starwars/images/3/3c/Aldhani-Andor4.png/revision/latest/scale-to-width-down/500?cb=20250825022107",
+    "info": {
+      "region": "New Territories, , Outer Rim Territories, ",
+      "sector": "Cademimu sector, ",
+      "system": "Aldhani system, ",
+      "grid_square": "M-6, ",
+      "trade_routes": "Celanon Spur, ",
+      "atmosphere": "Type I, 5 BBY, ",
+      "terrain": "Grassy, , Mountains, , ",
+      "points_of_interest": "Highlands, , Aldhani rebel infiltration team's camp, , Lowlands, , Enterprise Zone, , Stone Valley, , Akti Amaugh, , Aldhani dam, , Nasma Brani, , Nasma Klain, , , Alkenzi Air Base, ",
+      "flora": ", Trees, ",
+      "fauna": "Ghoat, ",
+      "primary_languages": "Aldhani, ",
+      "demonym": "Dhanis, ",
+      "affiliation": "Galactic Empire, "
+    },
+    "affiliations": []
+  }
+}

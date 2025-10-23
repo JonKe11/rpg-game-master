@@ -1,0 +1,29 @@
+{
+  "title": "Chandrila",
+  "universe": "star_wars",
+  "cached_at": "2025-10-11T02:13:45.233816",
+  "content": {
+    "name": "Chandrila",
+    "description": "Chandrila\n\n\nAstrographical information\n\nRegion\nCore Worlds\n\n\nSector\nBormea sector\n\n\nSystem\nChandrila system\n\n\nGrid square\nL-9\n\n\nXYZ coordinates\n55.12, 32.23, 4.11\n\n\nSuns\n1\n\n\nMoons\nAt least 3:ChandraChandrakantChandrila's moon\n\n\n\nPhysical information\n\nClimate\nTemperate\n\n\nTerrain\nRolling hills\n\n\nSurface water\nCalm seas\n\n\nPoints of interest\nHanna Institute of AntiquitiesJunari PointLake AndrashaMothma EstateSarini IslandSilver Sea\n\n\nFlora\nBalmgrassCedarGarren treeOrcanthusShield of Andrasha geraniu",
+    "biography": "",
+    "abilities": [],
+    "image_url": "https://static.wikia.nocookie.net/starwars/images/0/0c/Chandrila-AoRCR.png/revision/latest/scale-to-width-down/500?cb=20170222012047",
+    "info": {
+      "region": "Core Worlds, ",
+      "sector": "Bormea sector, ",
+      "system": "Chandrila system, ",
+      "grid_square": "L-9, ",
+      "moons": "Chandra, , Chandrakant, , Chandrila's moon, ",
+      "surface_water": "seas, ",
+      "points_of_interest": "Hanna Institute of Antiquities, , Junari Point, , Lake Andrasha, , Mothma Estate, , Sarini Island, , Silver Sea, ",
+      "flora": "Balmgrass, , Cedar, , Garren tree, , Orcanthus, , Shield of Andrasha geranium, , Tintolive tree, ",
+      "fauna": "Bulabird, , Marmal-fish, , Pearlshell, , Preepnob, , Priprak, , Skor-fin, , Starleg, ",
+      "other_species": "Jawa, , Human, , Mon Calamari, , Pantoran, , Rodian, , Trandoshan, , Twi'lek, ",
+      "government": "Chandrila planetary government, ",
+      "demonym": "Chandrilan, ",
+      "major_cities": "Hanna City, capital, ",
+      "affiliation": "Galactic Republic, , Galactic Empire, , Alliance to Restore the Republic, , New Republic, "
+    },
+    "affiliations": []
+  }
+}

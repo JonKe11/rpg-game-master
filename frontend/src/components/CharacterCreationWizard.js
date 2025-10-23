@@ -2,14 +2,7 @@ import React, { useState } from 'react';
 import CharacterForm from './CharacterForm';
 import AttributeAllocation from './AttributeAllocation';
 import SkillAllocation from './SkillAllocation';
-import axios from 'axios';
-
-const api = axios.create({
-  baseURL: 'http://localhost:8000/api/v1',
-  headers: {
-    'Content-Type': 'application/json',
-  }
-});
+import api from '../api/axiosConfig';
 
 function CharacterCreationWizard({ onClose, onSuccess }) {
   const [step, setStep] = useState(1);
@@ -62,6 +55,7 @@ function CharacterCreationWizard({ onClose, onSuccess }) {
           characterData={characterData}
           onBack={() => setStep(2)}
           onComplete={handleSkillsComplete}
+          isSubmitting={isSubmitting} // 🆕 DODANE
         />
       )}
     </>

@@ -1,0 +1,29 @@
+{
+  "title": "New Republic",
+  "universe": "star_wars",
+  "cached_at": "2025-10-10T22:59:06.723916",
+  "content": {
+    "name": "New Republic",
+    "description": "New Republic\n\n\nGeneral information\n\nOrganization type\nRepresentative democratic republic\n\n\nFounding document\nDeclaration of a New RepublicDeclaration of Rebellion\n\n\nConstitution\nCharter of the New Republic\n\n\nHead of state\nChancellor\n\n\nHead of government\nChancellor\n\n\nCommander-in-chief\nNew Republic High Command\n\n\nLegislative branch\nNew Republic Senate\n\n\nJudicial branch\nNew Republic Judiciary\n\n\nMilitary branch\nNew Republic Defense Force\n\n\n\nSocietal information\n\nCapital\nRotatingHanna City, Chandril",
+    "biography": "",
+    "abilities": [],
+    "image_url": "https://static.wikia.nocookie.net/starwars/images/0/0f/New_Republic_canon.svg/revision/latest/scale-to-width-down/500?cb=20160126010008",
+    "info": {
+      "organization_type": "democratic, republic, ",
+      "founding_document": "Declaration of a New Republic, , Declaration of Rebellion, ",
+      "constitution": "Charter of the New Republic, ",
+      "head_of_state": "Chancellor, ",
+      "commanderinchief": "New Republic High Command, ",
+      "legislative_branch": "New Republic Senate, ",
+      "judicial_branch": "New Republic Judiciary, ",
+      "military_branch": "New Republic Defense Force, ",
+      "capital": ", Hanna City, Chandrila, , , Quarrow, Nakadia, , Galactic City, Coruscant, , 9 ABY, , Republic City, Hosnian Prime, 28 ABY, ",
+      "official_language": "Galactic Basic Standard, ",
+      "currency": "New Republic credit, ",
+      "formed_from": "Alliance to Restore the Republic, ",
+      "date_established": "4 ABY, , 5 ABY, ",
+      "date_dissolved": "34 ABY, "
+    },
+    "affiliations": []
+  }
+}

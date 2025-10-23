@@ -1,0 +1,26 @@
+{
+  "message": "Here's the start of our campaign:\n\nJon stepped off the transport ship and onto the dusty surface of Nal Hutta, a world notorious for its murky politics and corrupt officials. A human from Aldhani, Jon had come to this infamous planet in search of information about his brother's disappearance - a fellow smuggler who had gone missing several rotations ago, leaving behind only cryptic messages and rumors of involvement with the Hutt Cartel. As he gazed out at the sprawling metropolis of Nar Shaddaa, the air thick with exhaust fumes and desperation, Jon knew he was in for a tough hunt.\n\nHe made his way through the crowded marketplaces, dodging hawkers and shady traders as he searched for leads on his brother's whereabouts. The towering skyscrapers of Nar Shaddaa loomed above him, their sleek surfaces reflecting the flickering glow of holographic advertisements that seemed to dance across the city's many facades.\n\n(Note: I chose Nal Hutta from the canon list, and Jon is currently in the city of Nar Shaddaa. The capital city of Nal Hutta is Nar Shaddaa.)",
+  "type": "narration",
+  "location": "Aldhani",
+  "timestamp": "2025-10-14T01:36:49.881135",
+  "validated": true,
+  "validation_result": {
+    "valid_species": [
+      "Hutt"
+    ],
+    "valid_planets": [
+      "Aldhani"
+    ],
+    "valid_organizations": [],
+    "invalid": [],
+    "unknown": [
+      "Note",
+      "Hutta",
+      "Nal",
+      "Nar",
+      "Jon",
+      "Cartel",
+      "Shaddaa"
+    ]
+  }
+}

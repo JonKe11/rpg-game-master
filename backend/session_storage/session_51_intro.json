@@ -1,0 +1,23 @@
+{
+  "message": "You are Jon, a Human on Aldhani. As you step into the bustling settlement, the twin suns cast long shadows across the dusty streets. Your journey is about to begin.",
+  "type": "narration",
+  "location": "Aldhani",
+  "timestamp": "2025-10-13T22:18:54.827993",
+  "validated": true,
+  "validation_result": {
+    "valid_species": [
+      "Aar'aa"
+    ],
+    "valid_planets": [
+      "Aldhani"
+    ],
+    "valid_organizations": [],
+    "invalid": [],
+    "unknown": [
+      "Kael",
+      "Gorthok",
+      "Jon's",
+      "Jon"
+    ]
+  }
+}

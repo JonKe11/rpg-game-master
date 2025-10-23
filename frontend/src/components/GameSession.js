@@ -1,6 +1,7 @@
 // frontend/src/components/GameSession.js
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import CampaignProgress from './CampaignProgress';
 
 const api = axios.create({
   baseURL: 'http://localhost:8000/api/v1',
@@ -9,8 +10,9 @@ const api = axios.create({
   }
 });
 
-function GameSession({ character, onClose }) {
+function GameSession({ character, sessionConfig, onClose }) {
   const [session, setSession] = useState(null);
+  const [campaign, setCampaign] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -25,8 +27,22 @@ function GameSession({ character, onClose }) {
     scrollToBottom();
   }, [messages]);
 
+  // 🆕 PROTECTION: Only start once
   useEffect(() => {
-    startSession();
+    const hasStarted = sessionStorage.getItem(`session_started_${character.id}`);
+    
+    if (!hasStarted) {
+      console.log('🎬 Starting new session for first time...');
+      sessionStorage.setItem(`session_started_${character.id}`, 'true');
+      startSession();
+    } else {
+      console.log('⚠️ Session already started - skipping');
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      sessionStorage.removeItem(`session_started_${character.id}`);
+    };
   }, []);
 
   const startSession = async () => {
@@ -39,19 +55,36 @@ function GameSession({ character, onClose }) {
 
     try {
       setIsStarting(true);
-      const response = await api.post('/game-sessions/start', {
-        character_id: character.id,
-        title: `Adventure of ${character.name}`
-      });
+      console.log('📡 Calling /game-sessions/start API...');
       
-      // Save session data
+      let response;
+      
+      if (sessionConfig?.type === 'campaign') {
+        response = await api.post('/game-sessions/start-campaign', {
+          character_id: character.id,
+          title: `${character.name}'s Campaign`,
+          campaign_length: sessionConfig.length || 'medium'
+        });
+        
+        if (response.data.campaign) {
+          setCampaign(response.data.campaign);
+        }
+      } else {
+        response = await api.post('/game-sessions/start', {
+          character_id: character.id,
+          title: `Adventure of ${character.name}`
+        });
+      }
+      
+      console.log('✅ API response received:', response.data);
+      
       setSession({
         session_id: response.data.session_id,
         character_id: character.id,
-        universe: character.universe
+        universe: character.universe,
+        is_campaign: sessionConfig?.type === 'campaign'
       });
 
-      // Add intro message
       const introMessage = response.data.intro;
       if (introMessage) {
         setMessages([{
@@ -59,20 +92,13 @@ function GameSession({ character, onClose }) {
           message: introMessage.message || introMessage,
           timestamp: introMessage.timestamp || new Date().toISOString()
         }]);
-      } else {
-        // Fallback intro
-        setMessages([{
-          type: 'narration',
-          message: `Welcome, ${character.name}! Your adventure in ${character.universe.replace('_', ' ')} begins...`,
-          timestamp: new Date().toISOString()
-        }]);
       }
       
       setIsStarting(false);
     } catch (error) {
       console.error('Error starting session:', error);
+      alert(`Failed to start session: ${error.response?.data?.detail || error.message}`);
       setIsStarting(false);
-      alert('Failed to start game session. Please try again.');
       onClose();
     }
   };
@@ -80,15 +106,8 @@ function GameSession({ character, onClose }) {
   const sendAction = async (e) => {
     e.preventDefault();
     
-    if (!inputMessage.trim()) return;
-    
-    if (!session?.session_id) {
-      console.error('No active session');
-      alert('Error: No active game session');
-      return;
-    }
+    if (!inputMessage.trim() || !session?.session_id) return;
 
-    // Add player message
     const playerMessage = {
       type: 'player',
       message: inputMessage,
@@ -106,7 +125,10 @@ function GameSession({ character, onClose }) {
         session_id: session.session_id
       });
 
-      // Add AI response
+      if (response.data.campaign_progress) {
+        setCampaign(response.data.campaign_progress);
+      }
+
       const aiMessage = {
         type: response.data.type || 'narration',
         message: response.data.message,
@@ -118,11 +140,32 @@ function GameSession({ character, onClose }) {
       console.error('Error processing action:', error);
       setMessages(prev => [...prev, {
         type: 'error',
-        message: 'An error occurred while processing your action. Please try again.',
+        message: 'An error occurred. Please try again.',
         timestamp: new Date().toISOString()
       }]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const refreshCampaignStatus = async () => {
+    if (!session?.session_id || !session?.is_campaign) return;
+
+    try {
+      const response = await api.get(`/game-sessions/${session.session_id}/campaign`);
+      setCampaign({
+        title: response.data.title,
+        theme: response.data.theme,
+        current_beat: response.data.current_beat?.title,
+        act: response.data.progress?.act,
+        progress_percent: response.data.progress?.percent,
+        turns_taken: response.data.progress?.turn,
+        turns_total: response.data.progress?.total_turns,
+        near_end: response.data.progress?.near_end,
+        completed: response.data.completed_beats === response.data.total_beats
+      });
+    } catch (error) {
+      console.error('Error fetching campaign status:', error);
     }
   };
 
@@ -213,13 +256,20 @@ function GameSession({ character, onClose }) {
   if (isStarting) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-        <div className="bg-gray-800 rounded-lg p-8">
-          <div className="text-white text-xl mb-4">Starting game session...</div>
+        <div className="bg-gray-800 rounded-lg p-8 text-center">
+          <div className="text-white text-xl mb-4">
+            {sessionConfig?.type === 'campaign' ? '📖 Planning your campaign...' : '🎲 Starting session...'}
+          </div>
           <div className="animate-pulse flex space-x-2 justify-center">
             <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
             <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
             <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
           </div>
+          {sessionConfig?.type === 'campaign' && (
+            <p className="text-gray-400 text-sm mt-4">
+              AI is generating your story arc...
+            </p>
+          )}
         </div>
       </div>
     );
@@ -231,29 +281,47 @@ function GameSession({ character, onClose }) {
       <div className="bg-gray-800 border-b border-gray-700 p-4 flex-shrink-0">
         <div className="container mx-auto flex justify-between items-center">
           <div>
-            <h2 className="text-2xl font-bold text-blue-400">
-              RPG Session - {character.name}
+            <h2 className="text-2xl font-bold text-blue-400 flex items-center gap-2">
+              {session?.is_campaign && '📖'}
+              {session?.is_campaign ? 'Campaign' : 'Session'} - {character.name}
             </h2>
-            <p className="text-gray-400">
+            <p className="text-gray-400 text-sm">
               {character.universe.replace('_', ' ')} • Level {character.level} {character.class_type || 'Adventurer'}
             </p>
           </div>
-          <button
-            onClick={endSession}
-            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-semibold transition duration-200"
-          >
-            End Session
-          </button>
+          <div className="flex gap-2">
+            {session?.is_campaign && (
+              <button
+                onClick={refreshCampaignStatus}
+                className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold transition text-sm"
+              >
+                📊 Refresh Progress
+              </button>
+            )}
+            <button
+              onClick={endSession}
+              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-semibold transition"
+            >
+              End Session
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Chat Area */}
       <div className="flex-1 overflow-y-auto p-4">
         <div className="container mx-auto max-w-4xl">
+          {session?.is_campaign && campaign && (
+            <CampaignProgress campaign={campaign} />
+          )}
+
           {messages.map((msg, index) => renderMessage(msg, index))}
+          
           {isLoading && (
             <div className="text-center text-gray-400 italic">
-              <span className="inline-block animate-pulse">Game Master is thinking...</span>
+              <span className="inline-block animate-pulse">
+                {session?.is_campaign ? '📖 Game Master is crafting the story...' : 'AI is thinking...'}
+              </span>
             </div>
           )}
           <div ref={messagesEndRef} />
@@ -263,7 +331,6 @@ function GameSession({ character, onClose }) {
       {/* Input Area */}
       <div className="bg-gray-800 border-t border-gray-700 p-4 flex-shrink-0">
         <div className="container mx-auto max-w-4xl">
-          {/* Dice buttons */}
           <div className="flex gap-2 mb-3 flex-wrap">
             {['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'].map(dice => (
               <button
@@ -277,13 +344,12 @@ function GameSession({ character, onClose }) {
             ))}
           </div>
           
-          {/* Message input */}
           <form onSubmit={sendAction} className="flex gap-3">
             <input
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="What do you do? (e.g., 'I look around', 'I go to the tavern', 'I attack')"
+              placeholder="What do you do?"
               className="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               disabled={isLoading}
             />
@@ -296,9 +362,8 @@ function GameSession({ character, onClose }) {
             </button>
           </form>
           
-          {/* Action hints */}
           <div className="mt-2 text-xs text-gray-400">
-            💡 Try: "I look around the room", "I approach the bartender", "I ask about rumors", "I attack the goblin"
+            💡 Try: "I look around", "I talk to the NPC", "I investigate the room"
           </div>
         </div>
       </div>

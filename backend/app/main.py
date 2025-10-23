@@ -1,5 +1,5 @@
 # backend/app/main.py
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -7,6 +7,9 @@ from app.core.config import get_settings
 from app.core.exceptions import AppException
 from app.models import Base, engine
 from app.api.v1 import api_router
+
+# 🆕 Import WebSocket manager
+from app.websocket import manager
 
 settings = get_settings()
 
@@ -21,10 +24,10 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS - WAŻNE: Dodaj PRZED wszystkimi routami
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,13 +48,46 @@ async def app_exception_handler(request: Request, exc: AppException):
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
 
+# 🆕 WebSocket endpoint
+@app.websocket("/ws/campaign/{campaign_id}")
+async def campaign_websocket(websocket: WebSocket, campaign_id: int):
+    """
+    WebSocket endpoint for real-time campaign communication
+    """
+    await manager.connect(websocket, campaign_id)
+    
+    try:
+        while True:
+            # Receive message from client
+            data = await websocket.receive_json()
+            
+            # Broadcast to all clients in this campaign
+            await manager.broadcast(campaign_id, {
+                "type": data.get("type", "message"),
+                "content": data.get("content"),
+                "user_id": data.get("user_id"),
+                "character_id": data.get("character_id"),
+                "timestamp": data.get("timestamp")
+            })
+            
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, campaign_id)
+        
+        # Notify others that someone left
+        await manager.broadcast(campaign_id, {
+            "type": "system",
+            "content": "A player has disconnected",
+            "timestamp": None
+        })
+
 # Root endpoint
 @app.get("/")
 async def root():
     return {
         "message": f"{settings.app_name} API",
         "version": settings.version,
-        "docs": "/docs"
+        "docs": "/docs",
+        "modes": ["ai", "multiplayer"]  # 🆕
     }
 
 # Health check

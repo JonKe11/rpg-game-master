@@ -1,0 +1,31 @@
+{
+  "message": "You are Ziutson, a Human on Chandrila. As you step into the bustling settlement, the twin suns cast long shadows across the dusty streets. Your journey is about to begin.",
+  "type": "narration",
+  "location": "Chandrila",
+  "timestamp": "2025-10-11T02:14:50.676763",
+  "validated": true,
+  "validation_result": {
+    "valid_species": [
+      "Chandrilan"
+    ],
+    "valid_planets": [
+      "Chandrila"
+    ],
+    "valid_organizations": [],
+    "invalid": [
+      "Context",
+      "Dejarik",
+      "Their",
+      "Talla",
+      "Rumors",
+      "World",
+      "Gorrak",
+      "Core",
+      "Chandrila's",
+      "Ziutson",
+      "Ziutson's",
+      "Amidst"
+    ],
+    "unknown": []
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "universe": "star_wars",
+  "created_at": "2025-10-13T21:04:14.112780",
+  "last_updated": "2025-10-13T21:05:01.346203",
+  "starting_planet": "Aldhani",
+  "current_planet": "Aldhani",
+  "capital_city": null,
+  "current_location": null,
+  "npcs": {
+    "Jon": {
+      "name": "Jon",
+      "race": "Human",
+      "role": "on",
+      "location": "starting area",
+      "attitude": 0,
+      "first_met_turn": 0,
+      "last_seen_turn": 0,
+      "notes": [
+        "First mentioned in turn 0"
+      ]
+    }
+  },
+  "locations": {},
+  "established_facts": [],
+  "memory_traces": [
+    {
+      "turn": 0,
+      "description": "Met Jon, a Human on",
+      "is_critical": false,
+      "timestamp": "2025-10-13T21:05:01.346201"
+    }
+  ],
+  "timeline": [
+    {
+      "turn": 0,
+      "description": "Campaign 'Shadow of Aldhani' started on Aldhani",
+      "timestamp": "2025-10-13T21:05:01.346033"
+    },
+    {
+      "turn": 0,
+      "description": "Met Jon, a Human on",
+      "is_critical": false,
+      "timestamp": "2025-10-13T21:05:01.346201"
+    }
+  ],
+  "player_inventory": [],
+  "player_relationships": {},
+  "active_quests": [],
+  "completed_quests": []
+}

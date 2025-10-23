@@ -1,0 +1,77 @@
+{
+  "universe": "star_wars",
+  "created_at": "2025-10-13T21:05:01.355615",
+  "last_updated": "2025-10-13T21:05:41.323913",
+  "starting_planet": "Aldhani",
+  "current_planet": "Aldhani",
+  "capital_city": null,
+  "current_location": null,
+  "npcs": {
+    "Jon": {
+      "name": "Jon",
+      "race": "Human",
+      "role": "on",
+      "location": "starting area",
+      "attitude": 0,
+      "first_met_turn": 0,
+      "last_seen_turn": 0,
+      "notes": [
+        "First mentioned in turn 0"
+      ]
+    }
+  },
+  "locations": {},
+  "established_facts": [],
+  "memory_traces": [
+    {
+      "turn": 0,
+      "description": "Met Jon, a Human on",
+      "is_critical": false,
+      "timestamp": "2025-10-13T21:05:41.323911"
+    },
+    {
+      "turn": 1,
+      "description": "Story beat completed: Opening: Normal World",
+      "is_critical": true,
+      "timestamp": "2025-10-13T21:07:38.195210"
+    }
+  ],
+  "timeline": [
+    {
+      "turn": 0,
+      "description": "Campaign 'The Aldhani Heist' started on Aldhani",
+      "timestamp": "2025-10-13T21:05:41.323886"
+    },
+    {
+      "turn": 0,
+      "description": "Met Jon, a Human on",
+      "is_critical": false,
+      "timestamp": "2025-10-13T21:05:41.323911"
+    },
+    {
+      "turn": 0,
+      "description": "Player: i look around the town",
+      "timestamp": "2025-10-13T21:06:42.318216"
+    },
+    {
+      "turn": 1,
+      "description": "Player: I go closer to Abednedo and vendor",
+      "timestamp": "2025-10-13T21:07:38.195105"
+    },
+    {
+      "turn": 1,
+      "description": "Story beat completed: Opening: Normal World",
+      "is_critical": true,
+      "timestamp": "2025-10-13T21:07:38.195210"
+    },
+    {
+      "turn": 2,
+      "description": "Player: I ask for specifics of these spices",
+      "timestamp": "2025-10-13T21:09:08.468220"
+    }
+  ],
+  "player_inventory": [],
+  "player_relationships": {},
+  "active_quests": [],
+  "completed_quests": []
+}

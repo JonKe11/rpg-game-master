@@ -1,0 +1,26 @@
+{
+  "title": "Human",
+  "universe": "star_wars",
+  "cached_at": "2025-10-10T22:58:23.779064",
+  "content": {
+    "name": "Human",
+    "description": "Human\n\n\nBiological classification\n\nDesignation\nSentient\n\n\nClassification\nMammal\n\n\nSubspecies\nAlder-EspirionLoongren\n\n\nRaces\nAlderaanianAtterranChalactanChandrilanChristophsianCorellianDathomirianDhaniGenetianGhormanGrizmalltiHisseenianIlohianKenariLew'elanLothaliteMing PoNabooNoomis RiganOktarianOnderonianOruanPamarthenPijaliPolyneanSavarianSerennianValgauthian\n\n\n\nPhysical characteristics\n\nAverage height\nA little below 1.85 meters\n\n\nSkin color\nLight to dark tones\n\n\nHair color\nAuburnBlackBlondBro",
+    "biography": "Some believed that humans hailed from Coruscant, one of the galaxy's so-called Core Worlds, but that theory was never proven. Many humans changed the course of galactic history, from politicians to slaves and even Jedi Knights. Darth Sidious, the Sith Lord who founded the autocratic Galactic Empire that ruled over the galaxy for over two decades, was a human from Naboo. Many members of the Alliance to Restore the Republic, including its founding members Mon Mothma, Bail Organa, and his adopted daughter Leia Organa were humans as well. The Galactic Empire was known to favor humans at the expense of nonhuman—or \"alien\"—species. The Empire's government and Imperial Military were dominated by humans. During the Age of the Empire, some humans like the Lothalite athletic director Janus Fhurek harbored xenophobic attitudes towards aliens and thought that their alien physiology gave them an unfair advantage over human grav-ball players.",
+    "abilities": [],
+    "image_url": "https://static.wikia.nocookie.net/starwars/images/3/3f/HumansInTheResistance-TROS.jpg/revision/latest/scale-to-width-down/500?cb=20200305153027",
+    "info": {
+      "designation": "Sentient, ",
+      "classification": "Mammal, ",
+      "subspecies": "Alder-Espirion, , Loongren, ",
+      "races": "Alderaanian, , Atterran, , Chalactan, , Chandrilan, , Christophsian, , Corellian, , Dathomirian, , Dhani, , Genetian, , Ghorman, , Grizmallti, , Hisseenian, , Ilohian, , Kenari, , Lew'elan, , Lothalite, , Ming Po, , Naboo, , Noomis Rigan, , Oktarian, , Onderonian, , Oruan, , Pamarthen, , Pijali, , Polynean, , Savarian, , Serennian, , Valgauthian, ",
+      "average_height": "meters, ",
+      "skin_color": "Light, ",
+      "hair_color": ", , , , , , , ",
+      "eye_color": ", , , , , , , , ",
+      "distinctions": ", , Oxygen breathing, ",
+      "point_of_origin": "Coruscant, , ",
+      "language": "Galactic Basic Standard, "
+    },
+    "affiliations": []
+  }
+}

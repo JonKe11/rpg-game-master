@@ -1,0 +1,25 @@
+{
+  "universe": "star_wars",
+  "created_at": "2025-10-14T01:36:00.102204",
+  "last_updated": "2025-10-14T01:36:00.102204",
+  "starting_planet": "Aldhani",
+  "current_planet": "Aldhani",
+  "homeworld": "Aldhani",
+  "capital_city": null,
+  "current_location": null,
+  "npcs": {},
+  "locations": {},
+  "established_facts": [],
+  "memory_traces": [],
+  "timeline": [
+    {
+      "turn": 0,
+      "description": "Campaign 'Revenge of the Smuggler' started on Aldhani",
+      "timestamp": "2025-10-14T01:36:49.880651"
+    }
+  ],
+  "player_inventory": [],
+  "player_relationships": {},
+  "active_quests": [],
+  "completed_quests": []
+}

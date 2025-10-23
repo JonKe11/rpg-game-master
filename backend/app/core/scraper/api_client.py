@@ -1,6 +1,7 @@
 # backend/app/core/scraper/api_client.py
 """
 MediaWiki API Client z rekurencyjnym pobieraniem subcategories
++ PRE-FILTERING Canon przez API
 """
 import requests
 from typing import List, Set, Optional, Dict
@@ -9,7 +10,7 @@ import time
 class WikiAPIClient:
     """
     Client dla MediaWiki API
-    Supports recursive subcategory traversal
+    Supports recursive subcategory traversal + Canon pre-filtering
     """
     
     def __init__(self, base_url: str = "https://starwars.fandom.com"):
@@ -131,7 +132,7 @@ class WikiAPIClient:
         subcats = self._get_category_direct(category, limit=100, namespace=14)
         
         if subcats:
-            print(f"{indent}  📁 Found {len(subcats)} subcategories")
+            print(f"{indent}  🔍 Found {len(subcats)} subcategories")
             
             # STEP 3: Recursively process each subcategory
             for subcat in subcats:
@@ -188,6 +189,7 @@ class WikiAPIClient:
     ) -> List[str]:
         """
         Pobiera kategorię (rekurencyjnie) i filtruje tylko Canon
+        ✅ NOWE: Pre-filtering przez API zamiast przez Legends suffix
         """
         print(f"📡 Fetching {category} recursively (max depth: {max_depth})...")
         
@@ -203,21 +205,85 @@ class WikiAPIClient:
         
         print(f"\n  📊 Total members (all depths): {len(all_members)}")
         
-        # Filter Canon
-        canon_members = [
-            member for member in all_members 
-            if not self._is_legends_article(member)
-        ]
+        # ✅ NOWE: Pre-filter przez API sprawdzając Category:Canon_articles
+        print(f"  🔍 Pre-filtering Canon via API...")
         
-        legends_count = len(all_members) - len(canon_members)
+        canon_members = []
+        legends_count = 0
+        noncanon_count = 0
         
-        print(f"  ✅ Canon (by exclusion): {len(canon_members)}")
-        print(f"  ❌ Legends (excluded): {legends_count}")
+        for member in all_members:
+            if len(canon_members) >= limit:
+                break
+            
+            # Quick Legends suffix check first (fast)
+            if self._is_legends_article(member):
+                legends_count += 1
+                continue
+            
+            # Then API check (slower but accurate)
+            if self.is_canon_article(member):
+                canon_members.append(member)
+            else:
+                noncanon_count += 1
+        
+        print(f"  ✅ Canon: {len(canon_members)}")
+        print(f"  ⚠️ Legends (by suffix): {legends_count}")
+        print(f"  ⚠️ Non-canon (by API): {noncanon_count}")
         
         return canon_members[:limit]
     
+    def is_canon_article(self, title: str) -> bool:
+        """
+        Szybkie sprawdzenie przez API czy artykuł jest Canon
+        Sprawdza Category:Canon_articles
+        """
+        # Rate limiting
+        time.sleep(0.05)
+        
+        params = {
+            'action': 'query',
+            'titles': title,
+            'prop': 'categories',
+            'cllimit': 'max',
+            'format': 'json'
+        }
+        
+        try:
+            response = self.session.get(self.api_url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if 'query' in data and 'pages' in data['query']:
+                pages = data['query']['pages']
+                page_id = list(pages.keys())[0]
+                
+                if page_id == '-1':  # Page doesn't exist
+                    return False
+                
+                page = pages[page_id]
+                
+                # Check categories
+                if 'categories' in page:
+                    categories = [cat['title'] for cat in page['categories']]
+                    
+                    # ✅ MUSI mieć Category:Canon_articles
+                    has_canon = 'Category:Canon_articles' in categories
+                    
+                    # ❌ NIE MOŻE mieć Legends/Non-canon
+                    has_legends = any('Legends' in cat for cat in categories)
+                    has_noncanon = any('Non-canon' in cat for cat in categories)
+                    
+                    return has_canon and not has_legends and not has_noncanon
+            
+            return False
+            
+        except Exception as e:
+            # W razie błędu API - nie blokuj, ale pomiń
+            return False
+    
     def _is_legends_article(self, title: str) -> bool:
-        """Sprawdza czy artykuł jest Legends"""
+        """Sprawdza czy artykuł jest Legends (po nazwie)"""
         return (
             title.endswith('/Legends') or 
             title.endswith('(Legends)') or
@@ -286,7 +352,7 @@ class WikiAPIClient:
             return []
     
     def is_canon(self, title: str) -> bool:
-        """Sprawdza czy Canon"""
+        """Sprawdza czy Canon (legacy method)"""
         if self._is_legends_article(title):
             return False
         

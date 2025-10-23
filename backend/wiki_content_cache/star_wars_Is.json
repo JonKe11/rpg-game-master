@@ -1,0 +1,29 @@
+{
+  "title": "Is",
+  "universe": "star_wars",
+  "cached_at": "2025-10-15T13:22:56.601769",
+  "content": {
+    "name": "Ysanne Isard",
+    "description": "Ysanne Isard\n\n\nBiographical information\n\nHomeworld\nCoruscant\n\n\nBorn\nc. 30 BBY, Coruscant\n\n\nDied\n9 ABY, Lusankya\n\n\n\nDescriptive information\n\nSpecies\nHuman\n\n\nGender\nFemale\n\n\nPronouns\nShe/her\n\n\nHeight\n1.8 meters\n\n\nHair color\nBlack and white\n\n\nEye color\nRed (left) and blue (right)\n\n\nSkin color\nLight\n\n\n\nFamily information\n\nFamily\nIsard family\n\n\nParent(s)\nArmand Isard\n\n\n\nChronological & political information\n\nAffiliation(s)\nGalactic EmpireImperial IntelligenceXucphra Corporation\n\n\n[Source]",
+    "biography": "",
+    "abilities": [],
+    "image_url": "https://static.wikia.nocookie.net/starwars/images/a/a7/Isard-NEGTC.png/revision/latest/scale-to-width-down/350?cb=20221020042042",
+    "info": {
+      "homeworld": "Coruscant, ",
+      "born": "30 BBY, , ",
+      "died": "9 ABY, Lusankya, ",
+      "species": "Human, ",
+      "gender": "Female, ",
+      "height": "meters, ",
+      "hair_color": "Black, ",
+      "family": "Isard family, ",
+      "parents": "Armand Isard, ",
+      "affiliations": "Galactic Empire, , Imperial Intelligence, , Xucphra Corporation, "
+    },
+    "affiliations": [
+      "Galactic Empire",
+      "Imperial Intelligence",
+      "Xucphra Corporation"
+    ]
+  }
+}

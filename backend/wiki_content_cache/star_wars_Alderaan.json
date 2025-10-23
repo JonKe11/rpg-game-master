@@ -1,0 +1,38 @@
+{
+  "title": "Alderaan",
+  "universe": "star_wars",
+  "cached_at": "2025-10-14T01:35:57.029702",
+  "content": {
+    "name": "Alderaan",
+    "description": "Alderaan\n\n\nAstrographical information\n\nRegion\nCore WorldsThe Interior\n\n\nSector\nAlderaan sector\n\n\nSystem\nAlderaan system\n\n\nGrid square\nM-10\n\n\nSuns\n1: Alderaan's sun\n\n\nMoons\n0\n\n\nTrade routes\nCommenor Run\n\n\nRotation period\n18 standard hours\n\n\nOrbital period\n364 standard days\n\n\n\nPhysical information\n\nClass\nTerrestrial\n\n\nDiameter\n12,500 kilometers\n\n\nAtmosphere\nBreathable\n\n\nTerrain\nForestsMountainousPlains\n\n\nPoints of interest\nAldera cathedralAppenza PeakCloudshape FallsGlarus LagoonsIstabith FallsIsa",
+    "biography": "",
+    "abilities": [],
+    "image_url": "https://static.wikia.nocookie.net/starwars/images/4/4a/Alderaan.jpg/revision/latest/scale-to-width-down/500?cb=20061211013805",
+    "info": {
+      "region": "Core Worlds, , The Interior, ",
+      "sector": "Alderaan sector, ",
+      "system": "Alderaan system, ",
+      "grid_square": "M-10, ",
+      "suns": "Alderaan's sun, ",
+      "trade_routes": "Commenor Run, ",
+      "rotation_period": "standard hours, ",
+      "orbital_period": "standard days, ",
+      "diameter": "kilometers, ",
+      "atmosphere": "Breathable, ",
+      "terrain": "Forests, , Mountainous, , ",
+      "points_of_interest": "Aldera cathedral, , Appenza Peak, , Cloudshape Falls, , Glarus Lagoons, , Istabith Falls, , Isatabith rain forest, , Kathou, , Polar Sea, , River Wuitho, , Royal Palace of Alderaan, , region, , University of Alderaan, ",
+      "flora": "Candlewick flower, , Chinar tree, , Conifer, , Kriin-wood, , Starblossom, , Starflower, ",
+      "fauna": "Alderaanian deer, , Alderaanian wolf-cat, , Manka cat, , Nerf, , Snow owl, , Thranta, , bird, ",
+      "other_species": "Human, ",
+      "primary_languages": "Galactic Basic Standard, , ",
+      "government": "Monarchy, , Alderaanian government, ",
+      "population": ", , , ",
+      "demonym": "Alderaanian, ",
+      "major_cities": "Aldera, capital, , Crevasse City, , Hallyn, , Sanctuary Coast, , city, ",
+      "major_imports": ", ",
+      "major_exports": ", , Wine, ",
+      "affiliation": "Elder Houses, , House of Organa, , Galactic Republic, , Galactic Empire, , , Alliance to Restore the Republic, "
+    },
+    "affiliations": []
+  }
+}

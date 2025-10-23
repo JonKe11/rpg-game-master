@@ -1,0 +1,72 @@
+{
+  "universe": "star_wars",
+  "created_at": "2025-10-13T22:18:54.863290",
+  "last_updated": "2025-10-13T22:19:31.950779",
+  "starting_planet": "Aldhani",
+  "current_planet": "Aldhani",
+  "capital_city": null,
+  "current_location": null,
+  "npcs": {
+    "Jon": {
+      "name": "Jon",
+      "race": "Human",
+      "role": "on",
+      "location": "starting area",
+      "attitude": 0,
+      "first_met_turn": 0,
+      "last_seen_turn": 0,
+      "notes": [
+        "First mentioned in turn 0"
+      ]
+    }
+  },
+  "locations": {},
+  "established_facts": [],
+  "memory_traces": [
+    {
+      "turn": 0,
+      "description": "Met Jon, a Human on",
+      "is_critical": false,
+      "timestamp": "2025-10-13T22:19:31.950777"
+    },
+    {
+      "turn": 1,
+      "description": "Story beat completed: Opening: Normal World",
+      "is_critical": true,
+      "timestamp": "2025-10-13T22:22:09.939078"
+    }
+  ],
+  "timeline": [
+    {
+      "turn": 0,
+      "description": "Campaign 'Rebellion's Reckoning' started on Aldhani",
+      "timestamp": "2025-10-13T22:19:31.950753"
+    },
+    {
+      "turn": 0,
+      "description": "Met Jon, a Human on",
+      "is_critical": false,
+      "timestamp": "2025-10-13T22:19:31.950777"
+    },
+    {
+      "turn": 0,
+      "description": "Player: I look around",
+      "timestamp": "2025-10-13T22:21:20.480153"
+    },
+    {
+      "turn": 1,
+      "description": "Player: Wyszedłem po prostu na spacer",
+      "timestamp": "2025-10-13T22:22:09.938944"
+    },
+    {
+      "turn": 1,
+      "description": "Story beat completed: Opening: Normal World",
+      "is_critical": true,
+      "timestamp": "2025-10-13T22:22:09.939078"
+    }
+  ],
+  "player_inventory": [],
+  "player_relationships": {},
+  "active_quests": [],
+  "completed_quests": []
+}
