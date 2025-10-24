@@ -1,176 +1,167 @@
+# backend/app/api/v1/endpoints/wiki.py
+"""
+Wiki API Endpoints with Unified Cache.
 
-from fastapi import APIRouter, HTTPException, Query
-from typing import Optional, List
+Features:
+- Planets, species, items with images
+- Unified cache (consistent across app)
+- Image prefetching with parallel downloads
+- Cache management endpoints
+"""
+
+from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
-from app.services.scraper_service import ScraperService
-import requests
+from typing import Optional, Dict, List
 from io import BytesIO
+import logging
+
+from app.services.unified_cache_service import UnifiedCacheService
+from app.core.scraper.image_fetcher import ImageFetcher
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
+# Global instances (singletons)
+cache_service = UnifiedCacheService()
+image_fetcher = ImageFetcher()
+
+
 # ============================================
-# CHARACTER DATA ENDPOINTS (dla scrapowania pojedynczych postaci)
+# HELPER: Fetch single image for endpoint
+# ============================================
+
+def fetch_single_image_for_endpoint(args: tuple) -> tuple:
+    """
+    Helper for parallel image fetching in endpoints.
+    
+    Args:
+        args: (name, image_url, index, total)
+        
+    Returns:
+        (name, success, was_cached)
+    """
+    name, image_url, idx, total = args
+    
+    if not image_url:
+        return (name, False, False)
+    
+    success, was_cached, content = image_fetcher.fetch_single(image_url)
+    
+    # Log progress
+    if success and was_cached:
+        logger.info(f"  ✅ [{idx:3d}/{total}] {name[:40]:40s} - cached")
+    elif success:
+        size_kb = len(content) / 1024 if content else 0
+        logger.info(f"  💾 [{idx:3d}/{total}] {name[:40]:40s} - {size_kb:6.1f}KB")
+    else:
+        logger.info(f"  ❌ [{idx:3d}/{total}] {name[:40]:40s} - failed")
+    
+    return (name, success, was_cached)
+
+
+# ============================================
+# IMAGE PROXY
 # ============================================
 
 @router.get("/image-proxy")
 async def proxy_image(url: str):
     """
-    Proxy dla obrazków z Fandom (omija CORS)
+    Proxy for Fandom images (bypasses CORS).
+    Uses file cache for persistence.
     """
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        
-        response = requests.get(url, headers=headers, stream=True, timeout=10)
-        response.raise_for_status()
+    cache_path = image_fetcher.get_cache_path(url)
+    
+    # Check cache
+    if cache_path.exists():
+        with open(cache_path, 'rb') as f:
+            content = f.read()
         
         return StreamingResponse(
-            BytesIO(response.content),
-            media_type=response.headers.get('content-type', 'image/png'),
+            BytesIO(content),
+            media_type='image/png',
             headers={
-                'Cache-Control': 'public, max-age=604800',
-                'Access-Control-Allow-Origin': '*'
+                'Cache-Control': 'public, max-age=2592000',
+                'Access-Control-Allow-Origin': '*',
+                'X-Cache': 'HIT'
             }
         )
-        
-    except Exception as e:
-        print(f"Image proxy error: {e}")
+    
+    # Fetch from source
+    success, was_cached, content = image_fetcher.fetch_single(url)
+    
+    if not success or not content:
         return Response(status_code=404)
-
-
-@router.get("/search/{entity_name}")
-async def search_entity(
-    entity_name: str,
-    universe: str = "star_wars"
-):
-    """Search for specific entity in wiki"""
-    scraper_service = ScraperService()
     
-    url = scraper_service.search_entity(entity_name, universe)
-    if not url:
-        raise HTTPException(status_code=404, detail="Entity not found")
-    
-    return {"entity": entity_name, "url": url}
+    return StreamingResponse(
+        BytesIO(content),
+        media_type='image/png',
+        headers={
+            'Cache-Control': 'public, max-age=2592000',
+            'Access-Control-Allow-Origin': '*',
+            'X-Cache': 'MISS'
+        }
+    )
 
-@router.get("/data/{entity_name}")
-async def get_entity_data(
-    entity_name: str,
-    universe: str = "star_wars"
-):
-    """Get full entity data from wiki (with scraping)"""
-    scraper_service = ScraperService()
-    
-    try:
-        data = scraper_service.get_entity_data(entity_name, universe)
-        return data
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
 
 # ============================================
-# CANON DATA ENDPOINTS (NOWY SYSTEM!)
+# CANON DATA
 # ============================================
 
 @router.get("/canon/all")
 async def get_all_canon_data(
-    universe: str = Query(default="star_wars", description="Universe to fetch data from"),
-    force_refresh: bool = Query(default=False, description="Force cache refresh")
+    universe: str = Query(default="star_wars"),
+    force_refresh: bool = Query(default=False)
 ):
-    """
-    Get ALL categorized canon data (58k+ items)
+    """Get all categorized canon data."""
+    if force_refresh:
+        cache_service.force_refresh_all(universe)
     
-    Uses cache (7 day TTL) unless force_refresh=true
-    
-    Response time:
-    - First call: ~2-3 minutes (one-time setup)
-    - Cached calls: <100ms
-    
-    Returns 15 categories:
-    - characters, species, organizations
-    - planets, locations, battles, events
-    - weapons, armor, items, vehicles, droids
-    - technology, creatures, abilities
-    """
-    scraper_service = ScraperService()
-    data = scraper_service.scraper.get_canon_categorized_data(
-        universe=universe,
-        depth=3,
-        force_refresh=force_refresh
-    )
+    data = cache_service.get_all_data(universe)
+    total_items = sum(len(items) for items in data.values())
     
     return {
         'universe': universe,
-        'total_items': sum(len(items) for items in data.values()),
-        'categories': {k: len(v) for k, v in data.items()},
+        'total_items': total_items,
+        'categories': len(data),
         'data': data
     }
 
+
 @router.get("/canon/summary")
-async def get_canon_summary(
-    universe: str = Query(default="star_wars")
-):
-    """
-    Get just category counts (lightweight)
-    
-    Perfect for checking what's available without loading full data
-    """
-    scraper_service = ScraperService()
-    data = scraper_service.scraper.get_canon_categorized_data(universe=universe)
+async def get_canon_summary(universe: str = Query(default="star_wars")):
+    """Get summary of canon data."""
+    summary = cache_service.get_summary(universe)
     
     return {
         'universe': universe,
-        'total_items': sum(len(items) for items in data.values()),
-        'categories': {k: len(v) for k, v in data.items() if v}
+        'total_items': sum(summary.values()),
+        'categories': summary
     }
 
+
 @router.get("/canon/category/{category}")
-async def get_canon_by_category(
+async def get_canon_category(
     category: str,
     universe: str = Query(default="star_wars"),
-    limit: Optional[int] = Query(default=None, description="Max items to return"),
-    offset: int = Query(default=0, description="Pagination offset"),
-    search: Optional[str] = Query(default=None, description="Filter by name (case-insensitive)")
+    limit: int = Query(default=100, le=5000),
+    offset: int = Query(default=0),
+    search: Optional[str] = Query(default=None)
 ):
-    """
-    Get items from specific category
-    
-    Available categories:
-    - characters, species, organizations
-    - planets, locations, battles, events
-    - weapons, armor, items, vehicles, droids
-    - technology, creatures, abilities
-    
-    Supports:
-    - Pagination (limit/offset)
-    - Search filtering
-    
-    Examples:
-    - /canon/category/weapons?limit=50&offset=0
-    - /canon/category/planets?search=tatooine
-    - /canon/category/species?limit=100&offset=100
-    """
-    scraper_service = ScraperService()
-    data = scraper_service.scraper.get_canon_categorized_data(universe=universe)
+    """Get items from specific category."""
+    data = cache_service.get_all_data(universe)
     
     if category not in data:
-        available = list(data.keys())
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Invalid category '{category}'. Available categories: {available}"
-        )
+        raise HTTPException(status_code=404, detail=f"Category '{category}' not found")
     
     items = data[category]
     
-    # Search filter
     if search:
         search_lower = search.lower()
         items = [item for item in items if search_lower in item.lower()]
     
-    # Pagination
     total = len(items)
-    if limit:
-        items = items[offset:offset+limit]
-    else:
-        items = items[offset:]
+    paginated_items = items[offset:offset+limit]
     
     return {
         'category': category,
@@ -178,384 +169,289 @@ async def get_canon_by_category(
         'total': total,
         'offset': offset,
         'limit': limit,
-        'returned': len(items),
-        'items': items
+        'returned': len(paginated_items),
+        'items': paginated_items
     }
 
+
 # ============================================
-# FAZA 2: GM TOOLS - Location System
+# LOCATIONS (PLANETS)
 # ============================================
 
 @router.get("/locations/planets")
 async def get_planets_with_images(
     universe: str = Query(default="star_wars"),
-    limit: int = Query(default=100, le=500)
+    limit: int = Query(default=100, le=2000),
+    prefetch: bool = Query(default=True),
+    parallel: bool = Query(default=True),
+    workers: int = Query(default=15, ge=1, le=30)
 ):
     """
-    Get planets for GM Location System (Faza 2)
+    Get planets WITH parallel image prefetch.
     
-    Returns:
-    - Planet names
-    - Image URLs (INFOBOX IMAGE from wiki!)
-    - Brief descriptions
+    ✅ FIXED: Now uses 'planets' category (not 'locations'!)
     """
-    scraper_service = ScraperService()
-    data = scraper_service.scraper.get_canon_categorized_data(universe=universe)
+    logger.info(f"\n🌍 Fetching {limit} planets with images...")
     
-    planets = data['planets'][:limit]
+    # ✅ FIX: Use get_planets() from UnifiedCache (not 'locations'!)
+    planets_data = cache_service.get_planets(
+        universe=universe,
+        limit=limit,
+        with_images=True
+    )
     
-    # Scrape images for each planet (ONLY INFOBOX IMAGE!)
-    planets_with_images = []
-    for idx, planet_name in enumerate(planets):
-        print(f"Fetching planet {idx+1}/{len(planets)}: {planet_name}")
+    logger.info(f"✅ Step 1/2 complete: {len(planets_data)} planets processed\n")
+    
+    # Prefetch images
+    if prefetch:
+        tasks = [
+            (p['name'], p.get('image_url'), idx + 1, len(planets_data))
+            for idx, p in enumerate(planets_data)
+            if p.get('image_url')
+        ]
         
-        try:
-            planet_data = scraper_service.get_entity_data(planet_name, universe)
+        if not tasks:
+            logger.warning("⚠️ No images to fetch")
+        elif parallel:
+            logger.info(f"🚀 Step 2/2: PARALLEL image prefetch ({workers} workers)")
+            logger.info(f"📦 {len(tasks)} images to process\n")
             
-            # Get ONLY infobox image (pierwsze zdjęcie po prawej)
-            image_url = planet_data.get('image_url')  # Ta metoda już pobiera infobox image!
+            stats = image_fetcher.fetch_batch_parallel(
+                tasks,
+                max_workers=workers,
+                show_progress=True
+            )
             
-            planets_with_images.append({
-                'name': planet_name,
-                'image_url': image_url,  # Z infoboxa
-                'description': planet_data.get('description', '')[:200] if planet_data.get('description') else None
-            })
-        except Exception as e:
-            print(f"Error fetching {planet_name}: {e}")
-            planets_with_images.append({
-                'name': planet_name,
-                'image_url': None,
-                'description': None
-            })
+            logger.info(f"\n✅ Step 2/2 complete!")
+            logger.info(f"   💾 Downloaded: {stats['downloaded']}")
+            logger.info(f"   ✅ Cached: {stats['cached']}")
+            logger.info(f"   ❌ Failed: {stats['failed']}")
+        else:
+            # Sequential
+            logger.info(f"📥 Step 2/2: Sequential image prefetch\n")
+            
+            for task in tasks:
+                fetch_single_image_for_endpoint(task)
+    
+    logger.info(f"\n🎉 All done! Returning {len(planets_data)} planets\n")
     
     return {
         'universe': universe,
-        'total': len(planets_with_images),
-        'planets': planets_with_images
+        'total': len(planets_data),
+        'planets': planets_data
     }
+
 
 @router.get("/locations/by-planet")
 async def get_locations_by_planet(
     universe: str = Query(default="star_wars"),
-    planet: Optional[str] = Query(default=None, description="Filter by planet name"),
-    limit: int = Query(default=500, le=2000)
+    planet: str = Query(...),
+    limit: int = Query(default=500, le=5000)
 ):
     """
-    Get all locations (optionally filtered by planet)
+    Get specific locations ON a planet.
     
-    Examples:
-    - /locations/by-planet?planet=Tatooine
-    - /locations/by-planet (all locations)
-    
-    Used by: GM Location dropdown
+    Note: This uses 'locations' category (cities, bases, etc).
     """
-    scraper_service = ScraperService()
-    data = scraper_service.scraper.get_canon_categorized_data(universe=universe)
+    # Use locations category (not planets!)
+    all_locations = cache_service.get_locations(universe=universe)
     
-    locations = data['locations']
-    
-    # Filter by planet if specified
-    if planet:
-        locations = [
-            loc for loc in locations 
-            if planet.lower() in loc.lower()
-        ]
+    planet_locations = [
+        loc for loc in all_locations 
+        if planet.lower() in loc.lower()
+    ]
     
     return {
         'universe': universe,
-        'planet_filter': planet,
-        'total': len(locations),
-        'locations': locations[:limit]
+        'planet': planet,
+        'total': len(planet_locations),
+        'locations': planet_locations[:limit]
     }
 
+
 # ============================================
-# FAZA 3: INVENTORY - Item Browser
+# ITEMS
 # ============================================
 
 @router.get("/items/all")
-async def get_all_items_categorized(
-    universe: str = Query(default="star_wars")
-):
-    """
-    Get ALL items categorized for Item Browser (FAZA 3)
-    
-    Returns:
-    - weapons (1200+)
-    - armor (300+)
-    - items (4000+)
-    - vehicles (2000+)
-    - droids (400+)
-    
-    Used by: Item Browser initial load
-    """
-    scraper_service = ScraperService()
-    data = scraper_service.scraper.get_canon_categorized_data(universe=universe)
-    
+async def get_all_items_summary(universe: str = Query(default="star_wars")):
+    """Get summary of all item categories."""
     return {
         'universe': universe,
         'categories': {
             'weapons': {
-                'count': len(data['weapons']),
-                'items': data['weapons']
+                'count': len(cache_service.get_weapons(universe)),
+                'sample': cache_service.get_weapons(universe)[:5]
             },
             'armor': {
-                'count': len(data['armor']),
-                'items': data['armor']
+                'count': len(cache_service.get_armor(universe)),
+                'sample': cache_service.get_armor(universe)[:5]
             },
             'items': {
-                'count': len(data['items']),
-                'items': data['items']
+                'count': len(cache_service.get_items(universe)),
+                'sample': cache_service.get_items(universe)[:5]
             },
             'vehicles': {
-                'count': len(data['vehicles']),
-                'items': data['vehicles']
+                'count': len(cache_service.get_vehicles(universe)),
+                'sample': cache_service.get_vehicles(universe)[:5]
             },
             'droids': {
-                'count': len(data['droids']),
-                'items': data['droids']
+                'count': len(cache_service.get_droids(universe)),
+                'sample': cache_service.get_droids(universe)[:5]
             }
         }
     }
+
 
 @router.get("/items/category/{category}")
 async def get_items_by_category(
     category: str,
     universe: str = Query(default="star_wars"),
-    limit: int = Query(default=100, le=1000),
+    limit: int = Query(default=50, le=1000),
     offset: int = Query(default=0),
-    search: Optional[str] = Query(default=None),
-    with_images: bool = Query(default=False, description="Scrape images (slower!)")
+    search: Optional[str] = Query(default=None)
 ):
-    """
-    Get items from specific category
-    
-    Categories: weapons, armor, items, vehicles, droids
-    
-    If with_images=true, scrapes image URLs from wiki (much slower!)
-    
-    Used by: Item Browser with category filtering
-    """
-    scraper_service = ScraperService()
-    data = scraper_service.scraper.get_canon_categorized_data(universe=universe)
-    
+    """Get items from category (without images - fast)."""
     valid_categories = ['weapons', 'armor', 'items', 'vehicles', 'droids']
     if category not in valid_categories:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid category '{category}'. Valid: {valid_categories}"
+            detail=f"Invalid category. Valid: {valid_categories}"
         )
     
-    items = data[category]
+    # Get from unified cache
+    getter_map = {
+        'weapons': cache_service.get_weapons,
+        'armor': cache_service.get_armor,
+        'items': cache_service.get_items,
+        'vehicles': cache_service.get_vehicles,
+        'droids': cache_service.get_droids
+    }
     
-    # Search filter
+    all_items = getter_map[category](universe)
+    
+    # Convert to list of names
+    if all_items and isinstance(all_items[0], dict):
+        all_items = [item['name'] for item in all_items]
+    
     if search:
         search_lower = search.lower()
-        items = [item for item in items if search_lower in item.lower()]
+        all_items = [item for item in all_items if search_lower in item.lower()]
     
-    # Pagination
-    total = len(items)
-    paginated_items = items[offset:offset+limit]
-    
-    # Optionally scrape images
-    if with_images:
-        items_with_images = []
-        for item_name in paginated_items:
-            try:
-                item_data = scraper_service.get_entity_data(item_name, universe)
-                items_with_images.append({
-                    'name': item_name,
-                    'image_url': item_data.get('image_url'),
-                    'description': item_data.get('description', '')[:200]
-                })
-            except Exception:
-                items_with_images.append({
-                    'name': item_name,
-                    'image_url': None,
-                    'description': None
-                })
-        
-        return {
-            'category': category,
-            'universe': universe,
-            'total': total,
-            'offset': offset,
-            'limit': limit,
-            'returned': len(items_with_images),
-            'items': items_with_images
-        }
-    else:
-        return {
-            'category': category,
-            'universe': universe,
-            'total': total,
-            'offset': offset,
-            'limit': limit,
-            'returned': len(paginated_items),
-            'items': paginated_items
-        }
-
-@router.get("/items/popular/{category}")
-async def get_popular_items(
-    category: str,
-    universe: str = Query(default="star_wars"),
-    limit: int = Query(default=20, le=100)
-):
-    """
-    Get "popular" items from category (first N items)
-    
-    Perfect for quick suggestions/autocomplete
-    
-    Used by: Item search autocomplete
-    """
-    scraper_service = ScraperService()
-    data = scraper_service.scraper.get_canon_categorized_data(universe=universe)
-    
-    valid_categories = ['weapons', 'armor', 'items', 'vehicles', 'droids']
-    if category not in valid_categories:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid category '{category}'. Valid: {valid_categories}"
-        )
-    
-    items = data[category][:limit]
+    total = len(all_items)
+    paginated_items = all_items[offset:offset+limit]
     
     return {
         'category': category,
         'universe': universe,
-        'count': len(items),
-        'items': items
+        'total': total,
+        'offset': offset,
+        'limit': limit,
+        'returned': len(paginated_items),
+        'items': paginated_items
     }
+
+
+@router.get("/items/category/{category}/with-images")
+async def get_items_with_images(
+    category: str,
+    universe: str = Query(default="star_wars"),
+    limit: int = Query(default=50, le=1000),
+    offset: int = Query(default=0),
+    search: Optional[str] = Query(default=None),
+    prefetch: bool = Query(default=True),
+    parallel: bool = Query(default=True),
+    workers: int = Query(default=15, ge=1, le=30)
+):
+    """Get items WITH parallel image prefetch."""
+    valid_categories = ['weapons', 'armor', 'items', 'vehicles', 'droids']
+    if category not in valid_categories:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid category. Valid: {valid_categories}"
+        )
+    
+    logger.info(f"\n🎒 Fetching {category}...")
+    
+    # Get from unified cache with images
+    getter_map = {
+        'weapons': cache_service.get_weapons,
+        'armor': cache_service.get_armor,
+        'items': cache_service.get_items,
+        'vehicles': cache_service.get_vehicles,
+        'droids': cache_service.get_droids
+    }
+    
+    all_items = getter_map[category](universe, with_images=True)
+    
+    # Search filter
+    if search:
+        search_lower = search.lower()
+        all_items = [item for item in all_items if search_lower in item['name'].lower()]
+    
+    # Pagination
+    total = len(all_items)
+    items_with_images = all_items[offset:offset+limit]
+    
+    logger.info(f"✅ Step 1/2 complete: {len(items_with_images)} items\n")
+    
+    # Prefetch images
+    if prefetch:
+        tasks = [
+            (i['name'], i.get('image_url'), idx + 1, len(items_with_images))
+            for idx, i in enumerate(items_with_images)
+            if i.get('image_url')
+        ]
+        
+        if tasks and parallel:
+            logger.info(f"🚀 Step 2/2: PARALLEL image prefetch ({workers} workers)")
+            logger.info(f"📦 {len(tasks)} images\n")
+            
+            stats = image_fetcher.fetch_batch_parallel(
+                tasks,
+                max_workers=workers,
+                show_progress=True
+            )
+            
+            logger.info(f"\n✅ Step 2/2 complete: ↓{stats['downloaded']} ✓{stats['cached']} ✗{stats['failed']}")
+    
+    logger.info(f"\n🎉 Done!\n")
+    
+    return {
+        'category': category,
+        'universe': universe,
+        'total': total,
+        'offset': offset,
+        'limit': limit,
+        'returned': len(items_with_images),
+        'items': items_with_images
+    }
+
 
 # ============================================
 # CACHE MANAGEMENT
 # ============================================
 
+@router.get("/cache/stats")
+async def get_cache_stats(universe: str = Query(default="star_wars")):
+    """Get cache statistics."""
+    cache_info = cache_service.get_cache_info(universe)
+    
+    return cache_info
+
+
 @router.post("/cache/invalidate")
 async def invalidate_cache(
-    universe: str = Query(default="star_wars")
+    universe: str = Query(default="star_wars"),
+    clear_images: bool = Query(default=False)
 ):
-    """
-    Force cache refresh
+    """Force cache refresh."""
+    cache_service.force_refresh_all(universe)
     
-    Next request will fetch fresh data from wiki (~2-3 minutes)
-    """
-    scraper_service = ScraperService()
-    scraper_service.scraper.canon_cache.invalidate(universe, depth=3)
+    result = {'status': 'invalidated', 'universe': universe}
     
-    return {
-        'success': True,
-        'message': f'Cache invalidated for {universe}',
-        'note': 'Next request will fetch fresh data (~2-3 minutes)'
-    }
-
-@router.get("/cache/stats")
-async def get_cache_stats(
-    universe: str = Query(default="star_wars")
-):
-    """
-    Get cache metadata
+    if clear_images:
+        deleted = image_fetcher.clear_cache()
+        result['images_deleted'] = deleted
     
-    Shows:
-    - Cache age
-    - Expiration time
-    - Total items
-    - Category breakdown
-    """
-    scraper_service = ScraperService()
-    stats = scraper_service.scraper.canon_cache.get_stats(universe, depth=3)
-    
-    if not stats:
-        return {
-            'cached': False,
-            'message': 'No cache available',
-            'note': 'First request will take ~2-3 minutes to build cache'
-        }
-    
-    from datetime import datetime
-    created = datetime.fromisoformat(stats['created_at'])
-    expires = datetime.fromisoformat(stats['expires_at'])
-    age = datetime.now() - created
-    remaining = expires - datetime.now()
-    
-    return {
-        'cached': True,
-        'created_at': stats['created_at'],
-        'expires_at': stats['expires_at'],
-        'age_hours': round(age.total_seconds() / 3600, 1),
-        'remaining_hours': round(remaining.total_seconds() / 3600, 1),
-        'ttl_days': stats['ttl_days'],
-        'total_items': stats['total_items'],
-        'categories': stats['categories']
-    }
-    
-@router.get("/items/category/{category}/with-images")
-async def get_items_with_images(
-        category: str,
-        universe: str = Query(default="star_wars"),
-        limit: int = Query(default=50, le=200),
-        offset: int = Query(default=0),
-        search: Optional[str] = Query(default=None)
-    ):
-        """
-        Get items from specific category WITH IMAGES
-        
-        Categories: weapons, armor, items, vehicles, droids
-        
-        Returns items with:
-        - Name
-        - Image URL (from wiki infobox)
-        - Description
-        
-        Used by: GM Item Browser with images
-        """
-        scraper_service = ScraperService()
-        data = scraper_service.scraper.get_canon_categorized_data(universe=universe)
-        
-        valid_categories = ['weapons', 'armor', 'items', 'vehicles', 'droids']
-        if category not in valid_categories:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid category '{category}'. Valid: {valid_categories}"
-            )
-        
-        items = data[category]
-        
-        # Search filter
-        if search:
-            search_lower = search.lower()
-            items = [item for item in items if search_lower in item.lower()]
-        
-        # Pagination
-        total = len(items)
-        paginated_items = items[offset:offset+limit]
-        
-        # Scrape images for items
-        items_with_images = []
-        for idx, item_name in enumerate(paginated_items):
-            print(f"Fetching item {idx+1}/{len(paginated_items)}: {item_name}")
-            
-            try:
-                item_data = scraper_service.get_entity_data(item_name, universe)
-                
-                items_with_images.append({
-                    'name': item_name,
-                    'image_url': item_data.get('image_url'),  # Infobox image
-                    'description': item_data.get('description', '')[:200] if item_data.get('description') else None
-                })
-            except Exception as e:
-                print(f"Error fetching {item_name}: {e}")
-                items_with_images.append({
-                    'name': item_name,
-                    'image_url': None,
-                    'description': None
-                })
-        
-        return {
-            'category': category,
-            'universe': universe,
-            'total': total,
-            'offset': offset,
-            'limit': limit,
-            'returned': len(items_with_images),
-            'items': items_with_images
-        }
+    return result

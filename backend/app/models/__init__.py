@@ -5,6 +5,12 @@ from .session import GameSession
 from .campaign import MultiplayerCampaign, CampaignStatus, ParticipantRole
 from .campaign_message import CampaignMessage, MessageType
 from .friendship import Friendship, FriendshipStatus
+from app.models.wiki_article import (
+    WikiArticle,
+    ImageCache,
+    ScrapingLog,
+    CategoryCache
+)
 
 __all__ = [
     "Base",
@@ -13,7 +19,11 @@ __all__ = [
     "User",
     "Character",
     "GameSession",
-    # Multiplayer
+    'WikiArticle',      
+    'ImageCache',       
+    'ScrapingLog',      
+    'CategoryCache',    
+     # Multiplayer
     "MultiplayerCampaign",
     "CampaignStatus",
     "ParticipantRole",
@@ -21,4 +31,5 @@ __all__ = [
     "MessageType",
     "Friendship",
     "FriendshipStatus",
+    
 ]
