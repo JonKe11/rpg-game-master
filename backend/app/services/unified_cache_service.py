@@ -486,14 +486,19 @@ class UnifiedCacheService:
         Returns:
             Dict with cache info
         """
+        # ✅ FIX: Use _get_cache_path directly instead of non-existent exists()
+        cache_file = self.scraper.canon_cache._get_cache_path(universe, depth=3)
+        file_cache_exists = cache_file.exists()
+        
         info = {
             'universe': universe,
             'backend': 'hybrid' if self.use_hybrid else 'file',
             'file_cache': {
-                'exists': self.scraper.canon_cache.exists(universe, depth=3)
+                'exists': file_cache_exists,
+                'path': str(cache_file) if file_cache_exists else None
             }
         }
-        
+    
         # Add PostgreSQL info
         if self.use_hybrid and self.hybrid:
             try:
@@ -501,6 +506,7 @@ class UnifiedCacheService:
                 info['postgresql'] = pg_stats
             except Exception as e:
                 logger.error(f"Failed to get PostgreSQL stats: {e}")
+                info['postgresql'] = {'error': str(e)}
         
         return info
 

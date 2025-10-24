@@ -67,7 +67,8 @@ async def lifespan(app: FastAPI):
     logger.info("\n🎯 Initiating background prefetch...")
     logger.info("   (API will be available immediately!)\n")
     
-    prefetch_task = asyncio.create_task(
+    # ✅ FIX: Use ensure_future instead of create_task for lifespan context
+    prefetch_task = asyncio.ensure_future(
         startup_prefetch_all(
             universe='star_wars',
             force_refresh=False,  # Set to True to always refresh

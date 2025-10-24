@@ -12,14 +12,18 @@ class CanonCache:
     Zapisuje do JSON, TTL 7 dni
     """
     
-    def __init__(self, cache_dir: str = "cache/canon"):
+    def __init__(self, cache_dir: str = "canon_cache"):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.ttl_days = 7
     
-    def get_cache_path(self, universe: str, depth: int) -> Path:
-        """Ścieżka do pliku cache"""
+    def _get_cache_path(self, universe: str, depth: int) -> Path:
+        """Ścieżka do pliku cache (internal use)"""
         return self.cache_dir / f"{universe}_depth{depth}.json"
+    
+    def get_cache_path(self, universe: str, depth: int) -> Path:
+        """Ścieżka do pliku cache (public API)"""
+        return self._get_cache_path(universe, depth)
     
     def get_metadata_path(self, universe: str, depth: int) -> Path:
         """Ścieżka do metadanych cache"""
@@ -27,7 +31,7 @@ class CanonCache:
     
     def is_valid(self, universe: str, depth: int) -> bool:
         """Sprawdź czy cache jest aktualny"""
-        cache_path = self.get_cache_path(universe, depth)
+        cache_path = self._get_cache_path(universe, depth)
         meta_path = self.get_metadata_path(universe, depth)
         
         if not cache_path.exists() or not meta_path.exists():
@@ -45,12 +49,39 @@ class CanonCache:
         except Exception:
             return False
     
+    def exists(self, universe: str, depth: int = 3) -> bool:
+        """
+        ✅ FIX: Check if cache file exists and is valid.
+        
+        Args:
+            universe: Universe name
+            depth: Recursion depth (default: 3)
+            
+        Returns:
+            True if cache exists and is not expired
+        """
+        cache_file = self._get_cache_path(universe, depth)
+        
+        if not cache_file.exists():
+            return False
+        
+        # Check if expired
+        try:
+            age = datetime.now() - datetime.fromtimestamp(cache_file.stat().st_mtime)
+            
+            if age.days > self.ttl_days:
+                return False
+            
+            return True
+        except Exception:
+            return False
+    
     def load(self, universe: str, depth: int) -> Optional[Dict[str, List[str]]]:
         """Załaduj z cache"""
         if not self.is_valid(universe, depth):
             return None
         
-        cache_path = self.get_cache_path(universe, depth)
+        cache_path = self._get_cache_path(universe, depth)
         meta_path = self.get_metadata_path(universe, depth)
         
         try:
@@ -84,7 +115,7 @@ class CanonCache:
         data: Dict[str, List[str]]
     ):
         """Zapisz do cache z metadanymi"""
-        cache_path = self.get_cache_path(universe, depth)
+        cache_path = self._get_cache_path(universe, depth)
         meta_path = self.get_metadata_path(universe, depth)
         
         try:
@@ -125,7 +156,7 @@ class CanonCache:
     
     def invalidate(self, universe: str, depth: int):
         """Usuń cache (force refresh)"""
-        cache_path = self.get_cache_path(universe, depth)
+        cache_path = self._get_cache_path(universe, depth)
         meta_path = self.get_metadata_path(universe, depth)
         
         deleted = []
@@ -139,7 +170,7 @@ class CanonCache:
             deleted.append(meta_path.name)
         
         if deleted:
-            print(f"🗑️  Cache invalidated: {', '.join(deleted)}")
+            print(f"🗑️ Cache invalidated: {', '.join(deleted)}")
     
     def get_stats(self, universe: str, depth: int) -> Optional[Dict]:
         """Pobierz statystyki cache bez ładowania danych"""
