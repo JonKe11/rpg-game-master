@@ -1,17 +1,14 @@
 # backend/app/services/unified_cache_service.py
 """
 Unified Cache Service - Single API for all cache operations.
-
 Now with HYBRID backend:
 - Primary: PostgreSQL + Filesystem (HybridCacheService)
 - Fallback: File-based cache (backward compatibility)
-
 Migration strategy:
 1. Try PostgreSQL first
 2. Fallback to file cache if empty
 3. Dual-write mode (during transition)
 """
-
 from typing import Dict, List, Optional
 from functools import lru_cache
 import logging
@@ -486,16 +483,22 @@ class UnifiedCacheService:
         Returns:
             Dict with cache info
         """
-        # ✅ FIX: Use _get_cache_path directly instead of non-existent exists()
-        cache_file = self.scraper.canon_cache._get_cache_path(universe, depth=3)
-        file_cache_exists = cache_file.exists()
+        # ✅ FIX: Use public exists() method instead of private _get_cache_path
+        file_cache_exists = self.scraper.canon_cache.exists(universe, depth=3)
+        
+        # Get cache file path only if it exists
+        if file_cache_exists:
+            cache_file = self.scraper.canon_cache.get_cache_path(universe, depth=3)
+            cache_path = str(cache_file)
+        else:
+            cache_path = None
         
         info = {
             'universe': universe,
             'backend': 'hybrid' if self.use_hybrid else 'file',
             'file_cache': {
                 'exists': file_cache_exists,
-                'path': str(cache_file) if file_cache_exists else None
+                'path': cache_path
             }
         }
     
@@ -514,7 +517,6 @@ class UnifiedCacheService:
 # ============================================
 # SINGLETON INSTANCE
 # ============================================
-
 @lru_cache(maxsize=1)
 def get_unified_cache_service() -> UnifiedCacheService:
     """Get singleton instance of UnifiedCacheService."""

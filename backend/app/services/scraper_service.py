@@ -1,14 +1,37 @@
 # backend/app/services/scraper_service.py
+"""
+Scraper Service - Unified API for wiki data access.
+
+✅ UPDATED: Uses UnifiedCacheService + WikiFetcherService
+✅ Fast: Reads from PostgreSQL cache
+✅ Reliable: FANDOM API backend
+"""
+
 from typing import Dict, Optional, List
-from app.core.scraper.wiki_scraper import WikiScraper
+from app.services.unified_cache_service import UnifiedCacheService
+from app.services.wiki_fetcher_service import WikiFetcherService
 from app.core.exceptions import NotFoundError
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class ScraperService:
-    """Service dla operacji scrapowania wiki - zaktualizowany dla refactored scrapera"""
+    """
+    Service for wiki data access.
+    
+    ✅ NEW: Uses UnifiedCacheService for fast cached access
+    ✅ NEW: Uses WikiFetcherService for detailed article data
+    
+    This service provides a simple API for getting wiki data:
+    - Category lists (species, planets, etc.)
+    - Entity details (characters, locations, etc.)
+    - Search functionality
+    """
     
     def __init__(self):
-        self.scraper = WikiScraper()
-        self.cache = {}
+        self.cache_service = UnifiedCacheService(use_hybrid=True)
+        self.wiki_fetcher = WikiFetcherService()
     
     def get_category_list(
         self, 
@@ -17,26 +40,59 @@ class ScraperService:
         limit: int = 200
     ) -> List[str]:
         """
-        Pobiera pełną listę elementów z kategorii
-        Mapuje na nowe API scrapera
+        Get full list of items from category.
+        
+        ✅ UPDATED: Uses UnifiedCacheService (PostgreSQL + file cache)
+        
+        Args:
+            universe: Universe name (e.g., 'star_wars')
+            category: Category name
+            limit: Max results
+            
+        Returns:
+            List of item names
         """
-        category_map = {
-            'species': self.scraper.get_all_species,
-            'planets': self.scraper.get_all_planets,
-            'organizations': self.scraper.get_all_organizations,
-            'colors': self.scraper.get_colors,
-            'genders': lambda u: ['Male', 'Female', 'Other', 'None']
-        }
-        
-        method = category_map.get(category)
-        if not method:
-            return []
-        
         try:
-            items = method(universe)
+            # Map category to cache service method
+            category_methods = {
+                'species': self.cache_service.get_species,
+                'planets': self.cache_service.get_planets,
+                'characters': self.cache_service.get_characters,
+                'weapons': self.cache_service.get_weapons,
+                'armor': self.cache_service.get_armor,
+                'vehicles': self.cache_service.get_vehicles,
+                'droids': self.cache_service.get_droids,
+                'items': self.cache_service.get_items,
+                'organizations': self.cache_service.get_organizations,
+                'locations': self.cache_service.get_locations,
+                'battles': self.cache_service.get_battles,
+                'creatures': self.cache_service.get_creatures,
+                'technology': self.cache_service.get_technology
+            }
+            
+            # Special cases
+            if category == 'genders':
+                return ['Male', 'Female', 'Other', 'None']
+            
+            if category == 'colors':
+                return self._get_colors()
+            
+            # Get from cache
+            method = category_methods.get(category)
+            if not method:
+                logger.warning(f"Unknown category: {category}")
+                return []
+            
+            items = method(universe, limit=limit)
+            
+            # Convert to list of strings if needed
+            if items and isinstance(items[0], dict):
+                items = [item['name'] for item in items]
+            
             return items[:limit]
+        
         except Exception as e:
-            print(f"Error fetching {category}: {e}")
+            logger.error(f"Error fetching {category}: {e}")
             return []
     
     def search_category(
@@ -46,126 +102,241 @@ class ScraperService:
         query: str
     ) -> List[str]:
         """
-        Wyszukuje w kategorii elementy pasujące do zapytania
+        Search within category for items matching query.
+        
+        ✅ UPDATED: Uses UnifiedCacheService.search()
+        
+        Args:
+            universe: Universe name
+            category: Category to search in
+            query: Search query
+            
+        Returns:
+            List of matching item names
         """
-        all_items = self.get_category_list(universe, category)
-        query_lower = query.lower()
+        try:
+            # Use cache service search
+            results = self.cache_service.search(
+                universe=universe,
+                query=query,
+                category=category,
+                limit=20
+            )
+            
+            return [result['name'] for result in results]
         
-        matches = [
-            item for item in all_items 
-            if query_lower in item.lower()
-        ]
-        
-        return matches[:20]
+        except Exception as e:
+            logger.error(f"Search failed: {e}")
+            return []
     
     def get_planet_info(
         self, 
         planet_name: str, 
         universe: str = 'star_wars'
     ) -> Dict:
-        """Pobiera szczegółowe informacje o planecie"""
-        url = self.scraper.search_character(planet_name, universe)
-        if not url:
+        """
+        Get detailed planet information.
+        
+        ✅ UPDATED: Uses WikiFetcherService with FANDOM API
+        
+        Args:
+            planet_name: Planet name
+            universe: Universe name
+            
+        Returns:
+            Dict with planet data
+        """
+        try:
+            # Fetch from wiki
+            data = self.wiki_fetcher.fetch_article(planet_name, universe)
+            
+            if not data:
+                raise NotFoundError("Planet", planet_name)
+            
+            return {
+                'name': planet_name,
+                'description': data.get('description', ''),
+                'image_url': data.get('image_url'),
+                'url': data.get('url', ''),
+                'system': 'Unknown',  # Would need additional parsing
+                'sector': 'Unknown',
+                'region': 'Unknown',
+                'climate': 'Unknown'
+            }
+        
+        except Exception as e:
+            logger.error(f"Failed to get planet info: {e}")
             raise NotFoundError("Planet", planet_name)
-        
-        data = self.scraper.scrape_character_data(url)
-        
-        return {
-            'name': planet_name,
-            'description': data.get('description', ''),
-            'system': data.get('info', {}).get('system', 'Unknown'),
-            'sector': data.get('info', {}).get('sector', 'Unknown'),
-            'region': data.get('info', {}).get('region', 'Unknown'),
-            'climate': data.get('info', {}).get('climate', 'Unknown'),
-            'url': url
-        }
     
     def get_affiliation_info(
         self, 
         affiliation_name: str, 
         universe: str = 'star_wars'
     ) -> Dict:
-        """Pobiera informacje o organizacji/afilacji"""
-        url = self.scraper.search_character(affiliation_name, universe)
-        if not url:
+        """
+        Get organization/affiliation information.
+        
+        ✅ UPDATED: Uses WikiFetcherService with FANDOM API
+        
+        Args:
+            affiliation_name: Organization name
+            universe: Universe name
+            
+        Returns:
+            Dict with organization data
+        """
+        try:
+            data = self.wiki_fetcher.fetch_article(affiliation_name, universe)
+            
+            if not data:
+                raise NotFoundError("Affiliation", affiliation_name)
+            
+            return {
+                'name': affiliation_name,
+                'description': data.get('description', ''),
+                'image_url': data.get('image_url'),
+                'url': data.get('url', '')
+            }
+        
+        except Exception as e:
+            logger.error(f"Failed to get affiliation info: {e}")
             raise NotFoundError("Affiliation", affiliation_name)
-        
-        data = self.scraper.scrape_character_data(url)
-        
-        return {
-            'name': affiliation_name,
-            'description': data.get('description', ''),
-            'url': url
-        }
     
     def search_entity(
         self, 
         name: str, 
         universe: str = 'star_wars'
     ) -> Optional[str]:
-        """Wyszukuje encję (postać, lokację, przedmiot) w wiki"""
-        cache_key = f"{universe}:{name.lower()}"
+        """
+        Search for entity (character, location, item) in wiki.
         
-        if cache_key in self.cache:
-            return self.cache[cache_key]
+        ✅ UPDATED: Uses cache service search
         
-        url = self.scraper.search_character(name, universe)
-        if url:
-            self.cache[cache_key] = url
+        Args:
+            name: Entity name
+            universe: Universe name
+            
+        Returns:
+            Entity URL or None
+        """
+        try:
+            # Search in cache
+            results = self.cache_service.search(
+                universe=universe,
+                query=name,
+                limit=1
+            )
+            
+            if results:
+                # Fetch full data to get URL
+                data = self.wiki_fetcher.fetch_article(results[0]['name'], universe)
+                return data.get('url') if data else None
+            
+            return None
         
-        return url
+        except Exception as e:
+            logger.error(f"Entity search failed: {e}")
+            return None
     
     def get_entity_data(
         self, 
         name: str, 
         universe: str = 'star_wars'
     ) -> Dict:
-        """Pobiera pełne dane o encji z wiki"""
-        url = self.search_entity(name, universe)
+        """
+        Get full entity data from wiki.
         
-        if not url:
+        ✅ UPDATED: Uses WikiFetcherService
+        
+        Args:
+            name: Entity name
+            universe: Universe name
+            
+        Returns:
+            Dict with entity data
+        """
+        try:
+            data = self.wiki_fetcher.fetch_article(name, universe)
+            
+            if not data:
+                raise NotFoundError("Entity", name)
+            
+            return self._format_wiki_data(data)
+        
+        except Exception as e:
+            logger.error(f"Failed to get entity data: {e}")
             raise NotFoundError("Entity", name)
-        
-        data = self.scraper.scrape_character_data(url)
-        return self._format_wiki_data(data)
     
     def get_canon_elements(self, universe: str) -> Dict[str, List]:
-        """Pobiera podstawowe kanoniczne elementy dla uniwersum"""
-        try:
-            species = self.scraper.get_all_species(universe)[:20]
-            planets = self.scraper.get_all_planets(universe)[:20]
-            orgs = self.scraper.get_all_organizations(universe)[:20]
+        """
+        Get basic canonical elements for universe.
+        
+        ✅ UPDATED: Uses UnifiedCacheService
+        
+        Args:
+            universe: Universe name
             
+        Returns:
+            Dict with popular elements from each category
+        """
+        try:
             return {
-                'popular_species': species,
-                'popular_planets': planets,
-                'popular_affiliations': orgs,
+                'popular_species': self.cache_service.get_species(universe, limit=20),
+                'popular_planets': self.cache_service.get_planets(universe, limit=20),
+                'popular_affiliations': self.cache_service.get_organizations(universe, limit=20),
                 'genders': ['Male', 'Female', 'Other', 'None'],
-                'colors': self.scraper.get_colors()
+                'colors': self._get_colors()
             }
+        
         except Exception as e:
-            print(f"Error getting canon elements: {e}")
+            logger.error(f"Error getting canon elements: {e}")
+            # Fallback
             return {
                 'popular_species': ['Human'],
                 'popular_planets': ['Tatooine'],
                 'popular_affiliations': ['Jedi Order'],
                 'genders': ['Male', 'Female', 'Other', 'None'],
-                'colors': ['Blue', 'Green', 'Brown']
+                'colors': self._get_colors()
             }
     
     def clear_cache(self):
-        """Czyści cache"""
-        self.cache = {}
-        self.scraper.clear_cache()
+        """
+        Clear cache.
+        
+        ✅ UPDATED: Clears UnifiedCacheService caches
+        """
+        try:
+            # Force refresh will clear caches
+            self.cache_service.force_refresh_all()
+            logger.info("✅ Cache cleared")
+        
+        except Exception as e:
+            logger.error(f"Cache clear failed: {e}")
     
     def _format_wiki_data(self, data: Dict) -> Dict:
-        """Formatuje i czyści dane z wiki"""
+        """
+        Format and clean wiki data.
+        
+        Args:
+            data: Raw wiki data
+            
+        Returns:
+            Formatted data dict
+        """
         return {
-            'name': data.get('name', 'Unknown'),
+            'name': data.get('title', 'Unknown'),
             'description': data.get('description', ''),
-            'biography': data.get('biography', '')[:2000],
-            'abilities': data.get('abilities', [])[:10],
-            'affiliations': data.get('affiliations', []),
+            'biography': data.get('description', '')[:2000],  # Use description as biography
+            'abilities': [],  # Would need additional parsing
+            'affiliations': [],  # Would need additional parsing
             'image_url': data.get('image_url'),
-            'info': data.get('info_box', {})
+            'info': {}  # Would need additional parsing
         }
+    
+    def _get_colors(self) -> List[str]:
+        """Get standard color list"""
+        return [
+            'Blue', 'Green', 'Brown', 'Red', 'Black', 'White',
+            'Yellow', 'Purple', 'Orange', 'Pink', 'Gray', 'Silver',
+            'Gold', 'Cyan', 'Magenta', 'Violet', 'Turquoise'
+        ]

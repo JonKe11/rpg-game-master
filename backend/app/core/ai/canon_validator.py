@@ -1,15 +1,27 @@
 # backend/app/core/ai/canon_validator.py
 """
-Dynamic canon validation using wiki cache as source of truth
+Dynamic canon validation using wiki cache as source of truth.
+
+UPDATED: Works with new FANDOM API system.
+Maintains backward compatibility.
 """
+
 from typing import Set, List, Dict, Optional
+import logging
+
 from app.core.scraper.wiki_content_cache import WikiContentCache
 from app.core.scraper.wiki_scraper import WikiScraper
 
+logger = logging.getLogger(__name__)
+
+
 class CanonValidator:
     """
-    Validates content against wiki cache
+    Validates content against wiki cache.
+    
     NO hardcoded lists - everything from Wookieepedia!
+    
+    UPDATED: Uses new FANDOM API-based WikiScraper.
     """
     
     def __init__(self, universe: str = 'star_wars'):
@@ -21,17 +33,56 @@ class CanonValidator:
         self._canon_species: Optional[Set[str]] = None
         self._canon_planets: Optional[Set[str]] = None
         self._canon_organizations: Optional[Set[str]] = None
+        
+        # Full categorized data (lazy loaded)
+        self._categorized_data: Optional[Dict[str, List[str]]] = None
+    
+    def _load_categorized_data(self) -> Dict[str, List[str]]:
+        """
+        Load all categorized canon data from wiki.
+        
+        This is the main data source - fetched once and cached.
+        
+        Returns:
+            Dict: category -> list of article titles
+        """
+        if self._categorized_data is None:
+            logger.info(f"📡 Loading canon data for {self.universe}...")
+            
+            try:
+                # Use new WikiScraper (FANDOM API based)
+                self._categorized_data = self.scraper.get_canon_categorized_data(
+                    universe=self.universe,
+                    depth=3,
+                    limit=60000,
+                    force_refresh=False,  # Use cache if available
+                    prefetch_images=False  # Don't need images here
+                )
+                
+                total = sum(len(items) for items in self._categorized_data.values())
+                logger.info(f"✅ Loaded {total:,} canon articles")
+                
+            except Exception as e:
+                logger.error(f"❌ Failed to load canon data: {e}")
+                # Fallback to empty dict
+                self._categorized_data = {}
+        
+        return self._categorized_data
     
     def _load_canon_species(self) -> Set[str]:
         """Load all canon species from wiki categories"""
         if self._canon_species is None:
-            print(f"📡 Loading canon species for {self.universe}...")
+            logger.debug(f"Loading canon species for {self.universe}...")
+            
             try:
-                species_list = self.scraper.get_all_species(self.universe)
+                categorized = self._load_categorized_data()
+                species_list = categorized.get('species', [])
                 self._canon_species = set(species_list)
-                print(f"✅ Loaded {len(self._canon_species)} canon species")
+                
+                logger.info(f"✅ Loaded {len(self._canon_species):,} canon species")
+                
             except Exception as e:
-                print(f"⚠️ Failed to load species: {e}")
+                logger.error(f"⚠️ Failed to load species: {e}")
                 # Fallback to minimal safe list
                 self._canon_species = {'Human', 'Twi\'lek', 'Rodian', 'Wookiee'}
         
@@ -40,13 +91,17 @@ class CanonValidator:
     def _load_canon_planets(self) -> Set[str]:
         """Load all canon planets from wiki categories"""
         if self._canon_planets is None:
-            print(f"📡 Loading canon planets for {self.universe}...")
+            logger.debug(f"Loading canon planets for {self.universe}...")
+            
             try:
-                planets_list = self.scraper.get_all_planets(self.universe)
+                categorized = self._load_categorized_data()
+                planets_list = categorized.get('planets', [])
                 self._canon_planets = set(planets_list)
-                print(f"✅ Loaded {len(self._canon_planets)} canon planets")
+                
+                logger.info(f"✅ Loaded {len(self._canon_planets):,} canon planets")
+                
             except Exception as e:
-                print(f"⚠️ Failed to load planets: {e}")
+                logger.error(f"⚠️ Failed to load planets: {e}")
                 # Fallback
                 self._canon_planets = {'Tatooine', 'Coruscant', 'Naboo', 'Endor'}
         
@@ -55,66 +110,158 @@ class CanonValidator:
     def _load_canon_organizations(self) -> Set[str]:
         """Load all canon organizations from wiki categories"""
         if self._canon_organizations is None:
-            print(f"📡 Loading canon organizations for {self.universe}...")
+            logger.debug(f"Loading canon organizations for {self.universe}...")
+            
             try:
-                orgs_list = self.scraper.get_all_organizations(self.universe)
+                categorized = self._load_categorized_data()
+                orgs_list = categorized.get('organizations', [])
                 self._canon_organizations = set(orgs_list)
-                print(f"✅ Loaded {len(self._canon_organizations)} canon organizations")
+                
+                logger.info(f"✅ Loaded {len(self._canon_organizations):,} canon organizations")
+                
             except Exception as e:
-                print(f"⚠️ Failed to load organizations: {e}")
+                logger.error(f"⚠️ Failed to load organizations: {e}")
                 # Fallback
                 self._canon_organizations = {'Jedi Order', 'Sith', 'Galactic Empire'}
         
         return self._canon_organizations
     
     def get_canon_species(self, limit: int = None) -> List[str]:
-        """Get list of canon species (optionally limited)"""
+        """
+        Get list of canon species (optionally limited).
+        
+        Args:
+            limit: Max number to return
+            
+        Returns:
+            Sorted list of species names
+        """
         species = self._load_canon_species()
         species_list = sorted(list(species))
         return species_list[:limit] if limit else species_list
     
     def get_canon_planets(self, limit: int = None) -> List[str]:
-        """Get list of canon planets (optionally limited)"""
+        """
+        Get list of canon planets (optionally limited).
+        
+        Args:
+            limit: Max number to return
+            
+        Returns:
+            Sorted list of planet names
+        """
         planets = self._load_canon_planets()
         planets_list = sorted(list(planets))
         return planets_list[:limit] if limit else planets_list
     
     def get_canon_organizations(self, limit: int = None) -> List[str]:
-        """Get list of canon organizations (optionally limited)"""
+        """
+        Get list of canon organizations (optionally limited).
+        
+        Args:
+            limit: Max number to return
+            
+        Returns:
+            Sorted list of organization names
+        """
         orgs = self._load_canon_organizations()
         orgs_list = sorted(list(orgs))
         return orgs_list[:limit] if limit else orgs_list
     
+    def get_canon_category(self, category: str, limit: int = None) -> List[str]:
+        """
+        Get list of canon items for any category.
+        
+        Args:
+            category: Category name (e.g., 'weapons', 'vehicles')
+            limit: Max number to return
+            
+        Returns:
+            Sorted list of item names
+        """
+        try:
+            categorized = self._load_categorized_data()
+            items = categorized.get(category, [])
+            items_list = sorted(items)
+            return items_list[:limit] if limit else items_list
+        except Exception as e:
+            logger.error(f"Failed to get category {category}: {e}")
+            return []
+    
     def validate_species(self, species: str) -> bool:
-        """Check if species exists in wiki"""
+        """
+        Check if species exists in wiki.
+        
+        Args:
+            species: Species name to validate
+            
+        Returns:
+            True if species is canon
+        """
         if not species:
             return True
         canon_species = self._load_canon_species()
         return species in canon_species
     
     def validate_planet(self, planet: str) -> bool:
-        """Check if planet exists in wiki"""
+        """
+        Check if planet exists in wiki.
+        
+        Args:
+            planet: Planet name to validate
+            
+        Returns:
+            True if planet is canon
+        """
         if not planet:
             return True
         canon_planets = self._load_canon_planets()
         return planet in canon_planets
     
     def validate_organization(self, org: str) -> bool:
-        """Check if organization exists in wiki"""
+        """
+        Check if organization exists in wiki.
+        
+        Args:
+            org: Organization name to validate
+            
+        Returns:
+            True if organization is canon
+        """
         if not org:
             return True
         canon_orgs = self._load_canon_organizations()
         return org in canon_orgs
     
     def get_wiki_article(self, entity: str) -> Optional[Dict]:
-        """Get cached wiki article for entity"""
+        """
+        Get cached wiki article for entity.
+        
+        Args:
+            entity: Entity name
+            
+        Returns:
+            Article dict or None
+        """
         return self.cache.get_article(entity, self.universe)
     
-    def search_similar_canon(self, term: str, category: str = 'species') -> List[str]:
+    def search_similar_canon(
+        self, 
+        term: str, 
+        category: str = 'species'
+    ) -> List[str]:
         """
-        Search for similar canon terms
-        Useful when AI invents something close to real
+        Search for similar canon terms.
+        
+        Useful when AI invents something close to real.
         e.g., "Gorvothian" → suggests "Geonosian", "Corellian"
+        
+        Args:
+            term: Term to search for
+            category: Category to search in
+            
+        Returns:
+            List of similar canon terms
         """
         term_lower = term.lower()
         
@@ -137,15 +284,22 @@ class CanonValidator:
     
     def scan_and_validate(self, text: str) -> Dict[str, List[str]]:
         """
-        Scan text for entities and validate against wiki
-        Returns dict with valid/invalid entities
+        Scan text for entities and validate against wiki.
+        
+        Returns dict with valid/invalid entities.
+        
+        Args:
+            text: Text to scan
+            
+        Returns:
+            Dict with categorized entities
         """
         import re
         
         # Extract proper nouns
         proper_nouns = set(re.findall(r'\b[A-Z][a-z]+(?:\'[a-z]+)?\b', text))
         
-        # 🆕 REMOVE possessives (apostrophe-s) before checking
+        # Remove possessives (apostrophe-s) before checking
         cleaned_nouns = set()
         for noun in proper_nouns:
             # Remove 's from possessives (e.g., "Aldhani's" → "Aldhani")
@@ -179,7 +333,7 @@ class CanonValidator:
             'Force', 'Temple', 'District', 'City', 'Planet', 'System',
             'Republic', 'Empire', 'Alliance', 'Order', 'Council',
             'Master', 'Knight', 'Lord', 'Captain', 'Commander',
-            'Jedi', 'Sith',  # These are organizations, not invalid
+            'Jedi', 'Sith',  # These are organizations
             'Spice', 'Credits', 'Ship', 'Vessel', 'Station',
             'Market', 'Cantina', 'Port', 'Bay', 'Sector',
             
@@ -198,18 +352,14 @@ class CanonValidator:
             'Before', 'After', 'During', 'While', 'Until',
             'Night', 'Day', 'Morning', 'Evening', 'Dawn', 'Dusk',
             
-            # Meta/debug words (should never appear but just in case)
+            # Meta/debug words
             'Turn', 'Beat', 'Act', 'Session', 'Campaign',
             'Data', 'Status', 'State', 'World', 'Context',
             
-            # Polish words (common in Polish responses)
+            # Polish words (if any slip through)
             'Narrator', 'Player', 'Miejsce', 'Godzina', 'Data',
-            'Nocne', 'Nocna', 'Ale', 'Jasna', 'Jasne',
-            'Ostatnie', 'Ostatnia', 'Wydane', 'Wszystkie',
-            'Znane', 'Nowe', 'Stare', 'Dobre', 'Złe',
-            'Ponad', 'Przez', 'Podczas', 'Wokół',
             
-            # Common adjectives that get capitalized
+            # Common adjectives
             'Large', 'Small', 'Great', 'Grand', 'Old', 'New',
             'Ancient', 'Modern', 'Dark', 'Light', 'Deep', 'High',
             'Long', 'Short', 'Wide', 'Narrow', 'Thick', 'Thin',
@@ -235,9 +385,9 @@ class CanonValidator:
             else:
                 # Additional checks before marking as invalid
                 
-                # 1. Is it a likely NPC name? (short, simple, no suspicious endings)
+                # 1. Is it a likely NPC name? (short, simple)
                 if len(noun) <= 7 and noun[0].isupper() and noun[1:].islower():
-                    # Check if it doesn't have sci-fi suffixes that indicate fake species
+                    # Check if it doesn't have sci-fi suffixes
                     suspicious_endings = ('ian', 'ite', 'ese', 'ish', 'oid', 'an')
                     if not any(noun.lower().endswith(end) for end in suspicious_endings):
                         # Likely NPC name like "Kael", "Zara", "Thek"
@@ -249,18 +399,22 @@ class CanonValidator:
                 if article:
                     validated['unknown'].append(noun)  # Exists but unknown category
                 else:
-                    # 3. Only mark as INVALID if it's a complex/suspicious name
-                    # that looks like a fake species/planet
+                    # 3. Only mark as INVALID if it's complex/suspicious
                     if len(noun) > 7 or any(noun.lower().endswith(end) for end in ('ian', 'ite', 'ese', 'ish', 'oid', 'an')):
                         validated['invalid'].append(noun)
                     else:
-                        # Short unknown word - probably fine (could be NPC name)
+                        # Short unknown word - probably fine
                         validated['unknown'].append(noun)
         
         return validated
     
     def get_fallback_species(self) -> str:
-        """Safe fallback species"""
+        """
+        Get safe fallback species.
+        
+        Returns:
+            Safe species name
+        """
         common = ['Human', 'Twi\'lek', 'Rodian', 'Zabrak']
         import random
         species_set = self._load_canon_species()
@@ -268,9 +422,54 @@ class CanonValidator:
         return random.choice(available) if available else 'Human'
     
     def get_fallback_planet(self) -> str:
-        """Safe fallback planet"""
+        """
+        Get safe fallback planet.
+        
+        Returns:
+            Safe planet name
+        """
         common = ['Tatooine', 'Coruscant', 'Naboo', 'Corellia']
         import random
         planets_set = self._load_canon_planets()
         available = [p for p in common if p in planets_set]
         return random.choice(available) if available else 'Tatooine'
+    
+    def get_all_categories(self) -> List[str]:
+        """
+        Get list of all available categories.
+        
+        Returns:
+            List of category names
+        """
+        try:
+            categorized = self._load_categorized_data()
+            return list(categorized.keys())
+        except Exception as e:
+            logger.error(f"Failed to get categories: {e}")
+            return []
+    
+    def get_stats(self) -> Dict:
+        """
+        Get validator statistics.
+        
+        Returns:
+            Dict with stats
+        """
+        try:
+            categorized = self._load_categorized_data()
+            
+            return {
+                'universe': self.universe,
+                'total_categories': len(categorized),
+                'total_articles': sum(len(items) for items in categorized.values()),
+                'categories': {
+                    cat: len(items)
+                    for cat, items in categorized.items()
+                },
+                'species_loaded': len(self._canon_species) if self._canon_species else 0,
+                'planets_loaded': len(self._canon_planets) if self._canon_planets else 0,
+                'organizations_loaded': len(self._canon_organizations) if self._canon_organizations else 0,
+            }
+        except Exception as e:
+            logger.error(f"Failed to get stats: {e}")
+            return {'error': str(e)}

@@ -108,13 +108,31 @@ class CanonCache:
             print(f"❌ Cache load error: {e}")
             return None
     
+    # ✅ NOWA METODA - ALIAS DLA load()
+    def get(self, universe: str, depth: int = 3) -> Optional[Dict[str, List[str]]]:
+        """
+        Get cached data (alias for load).
+        
+        Args:
+            universe: Universe name
+            depth: Recursion depth (default: 3)
+            
+        Returns:
+            Cached data or None
+        """
+        return self.load(universe, depth)
+    
     def save(
         self, 
-        universe: str, 
-        depth: int, 
-        data: Dict[str, List[str]]
+        universe: str,
+        data: Dict[str, List[str]],
+        depth: int = 3
     ):
-        """Zapisz do cache z metadanymi"""
+        """
+        Zapisz do cache z metadanymi.
+        
+        ✅ FIX: Depth is now optional parameter with default value
+        """
         cache_path = self._get_cache_path(universe, depth)
         meta_path = self.get_metadata_path(universe, depth)
         

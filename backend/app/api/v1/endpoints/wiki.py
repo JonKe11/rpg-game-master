@@ -1,36 +1,36 @@
 # backend/app/api/v1/endpoints/wiki.py
 """
 Wiki API Endpoints with Unified Cache.
-
 Features:
 - Planets, species, items with images
 - Unified cache (consistent across app)
 - Image prefetching with parallel downloads
 - Cache management endpoints
+- ✅ NEW: Search and single article endpoints for frontend
+- ✅ FIXED: get_article_by_title now uses PostgreSQL directly
 """
-
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from fastapi.responses import StreamingResponse
 from typing import Optional, Dict, List
 from io import BytesIO
 import logging
+from sqlalchemy.orm import Session
 
 from app.services.unified_cache_service import UnifiedCacheService
 from app.core.scraper.image_fetcher import ImageFetcher
+from app.core.dependencies import get_db
+from app.services.postgres_cache_service import PostgresCacheService
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
 # Global instances (singletons)
 cache_service = UnifiedCacheService()
 image_fetcher = ImageFetcher()
 
-
 # ============================================
 # HELPER: Fetch single image for endpoint
 # ============================================
-
 def fetch_single_image_for_endpoint(args: tuple) -> tuple:
     """
     Helper for parallel image fetching in endpoints.
@@ -59,11 +59,9 @@ def fetch_single_image_for_endpoint(args: tuple) -> tuple:
     
     return (name, success, was_cached)
 
-
 # ============================================
 # IMAGE PROXY
 # ============================================
-
 @router.get("/image-proxy")
 async def proxy_image(url: str):
     """
@@ -103,11 +101,9 @@ async def proxy_image(url: str):
         }
     )
 
-
 # ============================================
 # CANON DATA
 # ============================================
-
 @router.get("/canon/all")
 async def get_all_canon_data(
     universe: str = Query(default="star_wars"),
@@ -127,7 +123,6 @@ async def get_all_canon_data(
         'data': data
     }
 
-
 @router.get("/canon/summary")
 async def get_canon_summary(universe: str = Query(default="star_wars")):
     """Get summary of canon data."""
@@ -138,7 +133,6 @@ async def get_canon_summary(universe: str = Query(default="star_wars")):
         'total_items': sum(summary.values()),
         'categories': summary
     }
-
 
 @router.get("/canon/category/{category}")
 async def get_canon_category(
@@ -173,11 +167,9 @@ async def get_canon_category(
         'items': paginated_items
     }
 
-
 # ============================================
 # LOCATIONS (PLANETS)
 # ============================================
-
 @router.get("/locations/planets")
 async def get_planets_with_images(
     universe: str = Query(default="star_wars"),
@@ -241,7 +233,6 @@ async def get_planets_with_images(
         'planets': planets_data
     }
 
-
 @router.get("/locations/by-planet")
 async def get_locations_by_planet(
     universe: str = Query(default="star_wars"),
@@ -268,11 +259,9 @@ async def get_locations_by_planet(
         'locations': planet_locations[:limit]
     }
 
-
 # ============================================
 # ITEMS
 # ============================================
-
 @router.get("/items/all")
 async def get_all_items_summary(universe: str = Query(default="star_wars")):
     """Get summary of all item categories."""
@@ -301,7 +290,6 @@ async def get_all_items_summary(universe: str = Query(default="star_wars")):
             }
         }
     }
-
 
 @router.get("/items/category/{category}")
 async def get_items_by_category(
@@ -350,7 +338,6 @@ async def get_items_by_category(
         'returned': len(paginated_items),
         'items': paginated_items
     }
-
 
 @router.get("/items/category/{category}/with-images")
 async def get_items_with_images(
@@ -427,18 +414,167 @@ async def get_items_with_images(
         'items': items_with_images
     }
 
+# ============================================
+# ✅ NEW: SEARCH
+# ============================================
+@router.get("/{universe}/search")
+async def search_articles(
+    universe: str,
+    q: str = Query(..., min_length=1, description="Search query"),
+    category: Optional[str] = Query(default=None, description="Filter by category (optional)"),
+    limit: int = Query(default=10, le=100, description="Max results to return")
+):
+    """
+    🔍 Search articles by title across all categories.
+    
+    Returns list of matching articles with basic info.
+    Used by WikiImportButton for character search.
+    
+    Examples:
+        - /wiki/star_wars/search?q=luke
+        - /wiki/star_wars/search?q=vader&category=characters&limit=5
+    """
+    logger.info(f"🔍 Searching for '{q}' in {universe} (category: {category or 'all'})")
+    
+    # Get all data
+    all_data = cache_service.get_all_data(universe)
+    
+    results = []
+    q_lower = q.lower()
+    
+    # Determine which categories to search
+    categories_to_search = [category] if category else all_data.keys()
+    
+    for cat in categories_to_search:
+        if cat not in all_data:
+            continue
+            
+        items = all_data[cat]
+        
+        # Search through items
+        for item in items:
+            if isinstance(item, str):
+                # Simple string item
+                if q_lower in item.lower():
+                    results.append({
+                        "title": item,
+                        "category": cat,
+                        "universe": universe
+                    })
+            elif isinstance(item, dict):
+                # Dict with name
+                name = item.get('name', '')
+                if q_lower in name.lower():
+                    results.append({
+                        "title": name,
+                        "category": cat,
+                        "universe": universe,
+                        "image_url": item.get('image_url'),
+                        "description": item.get('description', '')[:200]  # First 200 chars
+                    })
+            
+            if len(results) >= limit:
+                break
+        
+        if len(results) >= limit:
+            break
+    
+    logger.info(f"✅ Found {len(results)} results")
+    
+    return {
+        "universe": universe,
+        "query": q,
+        "category": category,
+        "total": len(results),
+        "results": results[:limit]
+    }
+
+
+# ============================================
+# ✅ FIXED: GET SINGLE ARTICLE (uses PostgreSQL)
+# ============================================
+@router.get("/{universe}/{category}/{title}")
+async def get_article_by_title(
+    universe: str,
+    category: str,
+    title: str,
+    db: Session = Depends(get_db)
+):
+    """
+    📄 Get single article by title from PostgreSQL.
+    
+    Returns full article data with all available information.
+    Used by WikiImportButton to fetch character details after search.
+    
+    Examples:
+        - /wiki/star_wars/characters/Luke_Skywalker
+        - /wiki/star_wars/planets/Tatooine
+        - /wiki/star_wars/weapons/Lightsaber
+    """
+    logger.info(f"📄 Fetching article: {category}/{title} from {universe}")
+    
+    # ✅ Use PostgreSQL directly!
+    postgres_cache = PostgresCacheService(db)
+    
+    # Normalize title (handle underscores and spaces)
+    title_normalized = title.replace('_', ' ')
+    
+    # Try to fetch from PostgreSQL
+    article = postgres_cache.get_article_by_title(
+        title=title_normalized,
+        universe=universe
+    )
+    
+    if not article:
+        # Try with original title (with underscores)
+        article = postgres_cache.get_article_by_title(
+            title=title,
+            universe=universe
+        )
+    
+    if not article:
+        logger.warning(f"❌ Article not found: {title} in {category}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Article '{title}' not found in category '{category}'"
+        )
+    
+    # Verify category matches (optional - can remove if causing issues)
+    if article.category != category:
+        logger.warning(f"⚠️ Category mismatch: requested {category}, found {article.category}")
+        # Don't raise error - just log it
+    
+    logger.info(f"✅ Found article: {article.title} (category: {article.category})")
+    
+    # Convert SQLAlchemy model to dict for response
+    result = {
+        "title": article.title,
+        "category": article.category,
+        "universe": article.universe,
+        "image_url": article.image_url,
+        "source_url": article.source_url,
+        "scraped_at": article.scraped_at.isoformat() if article.scraped_at else None,
+    }
+    
+    # Add content (JSONB field)
+    if article.content:
+        result["content"] = article.content
+        result["description"] = article.content.get('description', '')
+    else:
+        result["content"] = {}
+        result["description"] = ""
+    
+    return result
 
 # ============================================
 # CACHE MANAGEMENT
 # ============================================
-
 @router.get("/cache/stats")
 async def get_cache_stats(universe: str = Query(default="star_wars")):
     """Get cache statistics."""
     cache_info = cache_service.get_cache_info(universe)
     
     return cache_info
-
 
 @router.post("/cache/invalidate")
 async def invalidate_cache(

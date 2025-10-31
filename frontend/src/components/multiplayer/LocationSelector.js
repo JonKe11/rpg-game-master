@@ -27,62 +27,71 @@ function LocationSelector({
     };
 
     const loadPlanets = useCallback(async () => {
-        try {
-            setLoading(true);
-            
-            // ✨ SPRAWDŹ CACHE NAJPIERW!
-            const cached = wikiCache.get(universe, 'planets_with_images');
-            if (cached) {
-                console.log('✅ Loaded planets from FRONTEND cache!');
-                setPlanets(cached);
-                setLoading(false);
-                return;
-            }
-            
-            // ✨ Jeśli brak cache - pobierz z API
-            console.log('🔄 Fetching planets from API...');
-            const response = await api.get('/wiki/locations/planets', {
-                params: { universe, limit: 100 }
-            });
-            
-            const planetsData = response.data.planets || [];
-            setPlanets(planetsData);
-            
-            // ✨ ZAPISZ DO CACHE!
-            wikiCache.set(universe, 'planets_with_images', planetsData);
-            console.log(`💾 Cached ${planetsData.length} planets`);
-            
-        } catch (error) {
-            console.error('Error loading planets:', error);
-        } finally {
+    try {
+        setLoading(true);
+        
+        const cached = wikiCache.get(universe, 'planets_with_images');
+        if (cached) {
+            console.log('✅ Loaded planets from FRONTEND cache!');
+            setPlanets(cached);
             setLoading(false);
+            return;
         }
-    }, [universe]);
+        
+        console.log('🔄 Fetching planets from API...');
+        
+        // ✅ NOWY ENDPOINT: /wiki/{universe}/planets
+        const response = await api.get(`/wiki/locations/planets`, {
+            params: { 
+                universe: universe, // Przekaż universe jako parametr zapytania
+                limit: 100,
+                has_image: true
+            }
+        });
+        
+        // ✅ MAPOWANIE: Backend używa 'articles' zamiast 'planets'
+        const planetsData = response.data.planets || [];
+        setPlanets(planetsData);
+        
+        wikiCache.set(universe, 'planets_with_images', planetsData);
+        console.log(`💾 Cached ${planetsData.length} planets`);
+        
+    } catch (error) {
+        console.error('Error loading planets:', error);
+    } finally {
+        setLoading(false);
+    }
+}, [universe]);
 
     const loadLocationsForPlanet = useCallback(async (planet) => {
-        try {
-            // ✨ CACHE dla lokacji też!
-            const cached = wikiCache.get(universe, `locations_${planet}`);
-            if (cached) {
-                console.log(`✅ Loaded locations for ${planet} from cache!`);
-                setLocations(cached);
-                return;
-            }
-            
-            console.log(`🔄 Fetching locations for ${planet}...`);
-            const response = await api.get('/wiki/locations/by-planet', {
-                params: { universe, planet, limit: 500 }
-            });
-            
-            const locationsData = response.data.locations || [];
-            setLocations(locationsData);
-            
-            wikiCache.set(universe, `locations_${planet}`, locationsData);
-            
-        } catch (error) {
-            console.error('Error loading locations:', error);
+    try {
+        const cached = wikiCache.get(universe, `locations_${planet}`);
+        if (cached) {
+            console.log(`✅ Loaded locations for ${planet} from cache!`);
+            setLocations(cached);
+            return;
         }
-    }, [universe]);
+        
+        console.log(`🔄 Fetching locations for ${planet}...`);
+        
+        // ✅ NOWY ENDPOINT: /wiki/{universe}/locations
+        const response = await api.get(`/wiki/${universe}/locations`, {
+            params: { 
+                limit: 500,
+                search: planet  // Szukaj po planecie
+            }
+        });
+        
+        // ✅ MAPOWANIE
+        const locationsData = response.data.articles || response.data.locations || [];
+        setLocations(locationsData);
+        
+        wikiCache.set(universe, `locations_${planet}`, locationsData);
+        
+    } catch (error) {
+        console.error('Error loading locations:', error);
+    }
+}, [universe]);
 
     useEffect(() => {
         loadPlanets();

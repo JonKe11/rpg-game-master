@@ -1,34 +1,26 @@
 # backend/app/services/startup_prefetch_service.py
 """
 Startup Prefetch Service - Background data loading with PostgreSQL Hybrid Backend.
-
 NEW ARCHITECTURE:
 - Primary: PostgreSQL (HybridCacheService) - structured, queryable data
-- Backup: File cache (WikiScraper) - legacy support
+- Uses FANDOM API for all data fetching
 - Images: Filesystem cache (ImageFetcher) - binary files
 - Audit: ScrapingLog - tracks all operations
-
 This service runs in the background when the backend starts, ensuring:
 1. All canon articles are categorized and cached in PostgreSQL
 2. All images are pre-downloaded to filesystem
 3. Frontend gets instant responses (zero waiting!)
-
 The API is available immediately - prefetch doesn't block startup.
 """
-
 import asyncio
 import logging
 from typing import Dict, List, Optional
 from datetime import datetime
-
 from app.services.unified_cache_service import UnifiedCacheService
 from app.core.scraper.image_fetcher import ImageFetcher
-from app.core.scraper.wiki_scraper import WikiScraper
+from app.core.wiki import create_wiki_client  # ✅ NOWY IMPORT
 from app.models.database import SessionLocal
-
 logger = logging.getLogger(__name__)
-
-
 class StartupPrefetchService:
     """
     Manages background prefetching with PostgreSQL Hybrid Backend.
@@ -40,9 +32,10 @@ class StartupPrefetchService:
     - Audit logging (ScrapingLog)
     - Error resilience
     - Parallel image downloading
+    - FANDOM API integration (fast!)
     
     Architecture:
-    1. WikiScraper fetches + categorizes (file cache)
+    1. FANDOM API fetches all data with details (image URLs!)
     2. HybridCacheService writes to PostgreSQL
     3. ImageFetcher downloads images (filesystem)
     4. ScrapingLog tracks everything
@@ -51,7 +44,6 @@ class StartupPrefetchService:
     def __init__(self):
         self.cache_service = UnifiedCacheService(use_hybrid=True)
         self.image_fetcher = ImageFetcher()
-        self.scraper = WikiScraper()
         
         # Prefetch status
         self.is_running = False
@@ -127,7 +119,7 @@ class StartupPrefetchService:
         self.progress['started_at'] = datetime.now().isoformat()
         
         logger.info(f"\n{'='*80}")
-        logger.info(f"🚀 STARTUP PREFETCH - HYBRID MODE")
+        logger.info(f"🚀 STARTUP PREFETCH - FANDOM API MODE")
         logger.info(f"{'='*80}")
         logger.info(f"Universe: {universe}")
         logger.info(f"Force refresh: {force_refresh}")
@@ -152,8 +144,8 @@ class StartupPrefetchService:
                     self.progress['log_id'] = log.id
                     logger.info(f"📋 Created scraping log #{log.id}\n")
             
-            # STAGE 1: Categorize Canon Articles
-            await self._stage_1_categorize_articles(universe, force_refresh)
+            # STAGE 1: Fetch ALL data via FANDOM API (with details!)
+            await self._stage_1_fetch_via_api(universe, force_refresh)
             
             # STAGE 1.5: Write to PostgreSQL
             if use_hybrid and hybrid_service:
@@ -172,6 +164,8 @@ class StartupPrefetchService:
             
         except Exception as e:
             logger.error(f"❌ Prefetch failed: {e}")
+            import traceback
+            traceback.print_exc()
             self.progress['errors'].append(str(e))
             self.progress['stage'] = 'failed'
             
@@ -197,44 +191,46 @@ class StartupPrefetchService:
             logger.info(f"{'='*80}\n")
     
     # ============================================
-    # STAGE 1: Categorize Canon Articles
+    # STAGE 1: Fetch via FANDOM API (WITH DETAILS!)
     # ============================================
     
-    async def _stage_1_categorize_articles(
+    async def _stage_1_fetch_via_api(
         self,
         universe: str,
         force_refresh: bool
     ):
         """
-        Stage 1: Fetch and categorize all canon articles.
+        Stage 1: Fetch ALL canon data via SMART CATEGORIZATION.
         
-        This runs the parallel batch categorization (from wiki_scraper.py).
-        Takes ~2 minutes for 52,986 articles.
+        ✅ NEW APPROACH:
+        - Fetches ALL ~58k articles from Canon_articles
+        - Checks each article's categories
+        - Sorts automatically using keyword matching
         
-        Data is stored in file cache (backward compatibility).
+        Takes ~5-10 minutes for 58k articles.
         """
-        self.progress['stage'] = 'categorizing_articles'
+        self.progress['stage'] = 'fetching_via_api'
         
-        logger.info("📊 STAGE 1: Categorizing Canon Articles")
+        logger.info("📊 STAGE 1: Smart Canon Categorization")
         logger.info("="*80)
-        logger.info("⏱️  Estimated time: ~2 minutes")
-        logger.info("📦 Using WikiScraper parallel batch mode\n")
+        logger.info("⏱️  Estimated time: ~5-10 minutes")
+        logger.info("🎯 Method: Fetch from Canon_articles + auto-categorize")
+        logger.info("📦 Expected: ~58,000 articles\n")
         
         try:
-            # This runs in executor to not block event loop
-            loop = asyncio.get_event_loop()
-            
-            def fetch_data():
-                return self.scraper.get_canon_categorized_data(
-                    universe=universe,
-                    depth=3,
-                    limit=60000,
-                    force_refresh=force_refresh,
-                    prefetch_images=False  # We'll do this in Stage 2
+            # ✅ Use NEW smart method!
+            async with create_wiki_client(universe) as client:
+                logger.info(f"🔗 Connected to {client.config.name}\n")
+                
+                # This does EVERYTHING:
+                # 1. Fetches ALL from Canon_articles
+                # 2. Gets categories for each article
+                # 3. Categorizes automatically
+                # 4. Fetches details (image URLs!)
+                categorized_data = await client.get_all_canonical_data_smart(
+                    with_details=True,  # Get image URLs!
+                    max_workers=20       # Parallel processing
                 )
-            
-            # Run in thread executor (scraper uses ThreadPoolExecutor internally)
-            categorized_data = await loop.run_in_executor(None, fetch_data)
             
             # Store for later stages
             self._categorized_data = categorized_data
@@ -249,16 +245,18 @@ class StartupPrefetchService:
             
             for category, items in sorted(categorized_data.items(), key=lambda x: -len(x[1])):
                 if items:
-                    logger.info(f"      {category:15s}: {len(items):5,} items")
+                    # Count how many have images
+                    with_images = sum(1 for item in items if item.get('image_url'))
+                    logger.info(f"      {category:15s}: {len(items):5,} items ({with_images:,} with images)")
             
             logger.info("")
             
         except Exception as e:
-            logger.error(f"❌ Stage 1 failed: {e}")
+            logger.error(f"❌ Stage 1 failed: {e}", exc_info=True)
             raise
     
     # ============================================
-    # STAGE 1.5: Write to PostgreSQL
+    # ✅ FIXED STAGE 1.5: Write to PostgreSQL
     # ============================================
     
     async def _stage_1_5_write_to_postgresql(
@@ -269,8 +267,9 @@ class StartupPrefetchService:
         """
         Stage 1.5: Write categorized data to PostgreSQL.
         
-        Bulk inserts all articles to database for fast querying.
-        Takes ~1 minute for 52,986 articles.
+        ✅ FIXED: 
+        - Saves full content (all article fields, not just description)
+        - Preserves species, homeworld, abilities, etc.
         """
         self.progress['stage'] = 'writing_to_postgresql'
         
@@ -293,17 +292,47 @@ class StartupPrefetchService:
                 
                 def write_category():
                     # Prepare article data
-                    articles_data = [
-                        {
-                            'title': article,
-                            'universe': universe,
-                            'category': category,
-                            'content': {},
-                            'image_url': None,
-                            'source_url': None
-                        }
-                        for article in articles
-                    ]
+                    articles_data = []
+                    
+                    for article in articles:
+                        if isinstance(article, dict):
+                            # ✅ FIXED: Save ALL fields to content
+                            # Extract title and image_url, put rest in content
+                            title = article.get('title', article.get('name', 'Unknown'))
+                            image_url = article.get('image_url') or article.get('thumbnail')
+                            source_url = article.get('url')
+                            
+                            # Build content dict from ALL article fields
+                            content = {}
+                            for key, value in article.items():
+                                # Skip fields we store separately
+                                if key not in ['title', 'name', 'image_url', 'thumbnail', 'url']:
+                                    content[key] = value
+                            
+                            # Add description if exists
+                            if 'abstract' in article:
+                                content['description'] = article['abstract']
+                            elif 'description' in article:
+                                content['description'] = article['description']
+                            
+                            articles_data.append({
+                                'title': title,
+                                'universe': universe,
+                                'category': category,
+                                'content': content,  # ✅ Full content!
+                                'image_url': image_url,
+                                'source_url': source_url
+                            })
+                        else:
+                            # Just title (string)
+                            articles_data.append({
+                                'title': article,
+                                'universe': universe,
+                                'category': category,
+                                'content': {},
+                                'image_url': None,
+                                'source_url': None
+                            })
                     
                     # Bulk insert
                     return hybrid_service.pg_cache.bulk_upsert_articles(
@@ -341,7 +370,7 @@ class StartupPrefetchService:
             self.progress['errors'].append(f"PostgreSQL write: {str(e)}")
     
     # ============================================
-    # STAGE 2: Prefetch Images
+    # STAGE 2: Prefetch Images (FROM POSTGRESQL!)
     # ============================================
     
     async def _stage_2_prefetch_images(
@@ -351,7 +380,10 @@ class StartupPrefetchService:
         hybrid_service
     ):
         """
-        Stage 2: Pre-download all images for visual categories.
+        Stage 2: Pre-download images using data from PostgreSQL.
+        
+        ✅ NEW: Reads image URLs from PostgreSQL (already fetched in Stage 1!)
+        ✅ No more HTML scraping!
         
         Downloads images for:
         - Planets (for location selector)
@@ -368,50 +400,55 @@ class StartupPrefetchService:
         logger.info(f"💷 Workers: {max_workers} parallel downloads\n")
         
         # Categories that need images
-        visual_categories = ['planets', 'weapons', 'armor', 'vehicles', 'droids', 'items']
+        VISUAL_CATEGORIES = ['planets', 'weapons', 'armor', 'vehicles', 'droids', 'items']
         
         try:
-            categorized_data = self._categorized_data
+            if not hybrid_service:
+                logger.warning("⚠️ No hybrid service - skipping image prefetch")
+                return
             
-            # Count total items
-            total_items = sum(
-                len(categorized_data.get(cat, []))
-                for cat in visual_categories
-            )
-            
-            self.progress['images_total'] = total_items
-            
-            logger.info(f"📦 Categories to process:")
-            for category in visual_categories:
-                items = categorized_data.get(category, [])
-                logger.info(f"   {category:15s}: {len(items):,} items")
-            
-            logger.info(f"\n🚀 Starting parallel image prefetch...\n")
+            logger.info(f"📦 Reading image URLs from PostgreSQL...\n")
             
             # Process each category
-            for category in visual_categories:
-                items = categorized_data.get(category, [])
-                
-                if not items:
-                    continue
-                
+            for category in VISUAL_CATEGORIES:
                 logger.info(f"   🎯 {category.upper()}")
                 
-                # Limit to reasonable number per category
-                items_to_fetch = items[:1000]
+                # Get articles from PostgreSQL
+                articles = await self.postgres_service.get_articles_with_images(
+                    universe=universe,
+                    category=category,
+                    limit=5000  # ✅ Zwiększone z 1000 do 5000!
+    )
+                
+                # Filter: only articles with image_url and not yet cached
+                to_fetch = [
+                    article for article in articles
+                    if article.image_url and not article.image_cached
+                ]
+                
+                logger.info(f"      📋 Found {len(articles):,} articles, {len(to_fetch):,} need image download")
+                
+                if not to_fetch:
+                    logger.info(f"      ✅ All images already cached!\n")
+                    continue
+                
+                # Prepare tasks
+                tasks = [
+                    (article.title, article.image_url, idx + 1, len(to_fetch))
+                    for idx, article in enumerate(to_fetch)
+                ]
                 
                 # Run in executor
                 loop = asyncio.get_event_loop()
                 
-                def fetch_category_images():
-                    return self._fetch_images_for_category(
-                        items_to_fetch,
-                        category,
-                        universe,
-                        max_workers
+                def fetch_images():
+                    return self.image_fetcher.fetch_batch_parallel(
+                        tasks,
+                        max_workers=max_workers,
+                        show_progress=False  # We log ourselves
                     )
                 
-                stats = await loop.run_in_executor(None, fetch_category_images)
+                stats = await loop.run_in_executor(None, fetch_images)
                 
                 # Update progress
                 self.progress['images_downloaded'] += stats['downloaded']
@@ -421,39 +458,33 @@ class StartupPrefetchService:
                 logger.info(f"      ✅ ↓{stats['downloaded']:,} ✓{stats['cached']:,} ✗{stats['failed']:,}")
                 
                 # Update PostgreSQL image status
-                if hybrid_service:
-                    def update_image_status():
-                        for item_name in items_to_fetch:
-                            try:
-                                article = hybrid_service.pg_cache.get_article_by_title(
-                                    item_name,
-                                    universe
+                def update_image_status():
+                    for article in to_fetch:
+                        if article.image_url:
+                            cache_path = self.image_fetcher.get_cache_path(article.image_url)
+                            
+                            if cache_path.exists():
+                                hybrid_service.pg_cache.mark_image_cached(
+                                    article.title,
+                                    article.universe,
+                                    str(cache_path)
                                 )
                                 
-                                if article and article.image_url:
-                                    cache_path = self.image_fetcher.get_cache_path(article.image_url)
-                                    
-                                    if cache_path.exists():
-                                        hybrid_service.pg_cache.mark_image_cached(
-                                            article.id,
-                                            str(cache_path)
-                                        )
-                                        
-                                        # Register in image_cache table
-                                        url_hash = cache_path.stem
-                                        hybrid_service.pg_cache.register_image(
-                                            url=article.image_url,
-                                            url_hash=url_hash,
-                                            local_path=str(cache_path),
-                                            size_bytes=cache_path.stat().st_size
-                                        )
-                            except Exception:
-                                pass
-                    
-                    await loop.run_in_executor(None, update_image_status)
-                    logger.info(f"      💾 PostgreSQL updated")
+                                # Register in image_cache table
+                                url_hash = cache_path.stem
+                                try:
+                                    hybrid_service.pg_cache.register_image(
+                                        url=article.image_url,
+                                        url_hash=url_hash,
+                                        local_path=str(cache_path),
+                                        size_bytes=cache_path.stat().st_size
+                                    )
+                                except Exception as e:
+                                    # Ignore duplicate key errors
+                                    pass
                 
-                logger.info("")
+                await loop.run_in_executor(None, update_image_status)
+                logger.info(f"      💾 PostgreSQL updated\n")
             
             logger.info(f"✅ STAGE 2 COMPLETE!")
             logger.info(f"   💾 Downloaded: {self.progress['images_downloaded']:,}")
@@ -462,65 +493,10 @@ class StartupPrefetchService:
             
         except Exception as e:
             logger.error(f"❌ Stage 2 failed: {e}")
+            import traceback
+            traceback.print_exc()
             # Don't raise - images are optional
             self.progress['errors'].append(f"Image prefetch: {str(e)}")
-    
-    def _fetch_images_for_category(
-        self,
-        items: List[str],
-        category: str,
-        universe: str,
-        max_workers: int
-    ) -> Dict:
-        """
-        Fetch images for items in category (synchronous, runs in executor).
-        
-        Args:
-            items: List of item names
-            category: Category name
-            universe: Universe name
-            max_workers: Number of parallel workers
-            
-        Returns:
-            Dict with statistics
-        """
-        # Prepare tasks
-        tasks = []
-        
-        for idx, item_name in enumerate(items):
-            try:
-                # Get article URL
-                url = self.scraper.search_character(item_name, universe)
-                
-                if not url:
-                    continue
-                
-                # Scrape to get image URL
-                data = self.scraper.scrape_character_data(url)
-                image_url = data.get('image_url')
-                
-                if image_url:
-                    tasks.append((
-                        item_name,
-                        image_url,
-                        idx + 1,
-                        len(items)
-                    ))
-            
-            except Exception:
-                continue
-        
-        # Fetch all images in parallel
-        if not tasks:
-            return {'downloaded': 0, 'cached': 0, 'failed': 0, 'total': 0}
-        
-        logger.info(f"      📥 Fetching {len(tasks):,} images with valid URLs...")
-        
-        return self.image_fetcher.fetch_batch_parallel(
-            tasks,
-            max_workers=max_workers,
-            show_progress=False  # We log ourselves
-        )
     
     # ============================================
     # STAGE 3: Finalize
@@ -625,28 +601,29 @@ async def startup_prefetch_all(
     if not force_refresh:
         cache_info = service.cache_service.get_cache_info(universe)
         
-        # Check file cache
-        if cache_info.get('file_cache', {}).get('exists'):
-            logger.info("✅ File cache exists")
+        # Check file cache or PostgreSQL
+        file_exists = cache_info.get('file_cache', {}).get('exists')
+        pg_info = cache_info.get('postgresql')
+        pg_has_data = pg_info and pg_info.get('total_articles', 0) > 0
+        
+        if file_exists or pg_has_data:
+            logger.info("✅ Cache exists (file or PostgreSQL)")
+            logger.info("   ⏩ Skipping full prefetch")
+            logger.info("   💡 Use force_refresh=True to refresh\n")
             
-            # Check PostgreSQL
-            pg_info = cache_info.get('postgresql')
-            if pg_info and pg_info.get('total_articles', 0) > 0:
-                logger.info("✅ PostgreSQL cache exists")
-                logger.info("   ⏩ Skipping full prefetch")
-                logger.info("   💡 Use force_refresh=True to refresh\n")
-                
-                # Still check for missing images
-                if prefetch_images:
-                    logger.info("🖼️  Checking for missing images...")
+            # Still check for missing images
+            if prefetch_images and pg_has_data:
+                logger.info("🖼️  Checking for missing images...")
+                hybrid_service = service._init_hybrid_service()
+                if hybrid_service:
                     await service._stage_2_prefetch_images(
                         universe,
                         image_workers,
-                        service._init_hybrid_service()
+                        hybrid_service
                     )
                     service._close_hybrid_service()
-                
-                return
+            
+            return
     
     # Run full prefetch
     await service.prefetch_all(

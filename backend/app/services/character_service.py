@@ -2,7 +2,7 @@
 from typing import List, Optional, Dict
 from app.repositories.character_repository import CharacterRepository
 from app.models.character import Character
-from app.core.scraper.wiki_scraper import WikiScraper
+from app.services.wiki_fetcher_service import WikiFetcherService
 from app.core.exceptions import NotFoundError, ValidationError
 
 class CharacterService:
@@ -10,7 +10,7 @@ class CharacterService:
     
     def __init__(self, character_repository: CharacterRepository):
         self.char_repo = character_repository
-        self.wiki_scraper = WikiScraper()
+        self.wiki_fetcher = WikiFetcherService()  # ✅ NOWY: Wiki Fetcher
     
     def create_character(self, owner_id: int, **character_data) -> Character:
         """Create new character for user"""
@@ -39,29 +39,54 @@ class CharacterService:
         return character
     
     def enhance_with_wiki(self, character_id: int, user_id: int) -> Character:
-        """Enhance character with data from wiki"""
+        """
+        Enhance character with data from wiki.
+        
+        ✅ UPDATED: Uses new WikiFetcherService with FANDOM API.
+        
+        Args:
+            character_id: Character ID
+            user_id: User ID (for ownership check)
+            
+        Returns:
+            Updated character
+        """
         character = self.get_character_if_owner(character_id, user_id)
         
-        # Search wiki
-        url = self.wiki_scraper.search_character(
-            character.name, 
-            character.universe
-        )
+        try:
+            # Fetch from wiki using new API
+            wiki_data = self.wiki_fetcher.fetch_article(
+                character.name,
+                character.universe
+            )
+            
+            if wiki_data:
+                # Update character with wiki data
+                updates = {}
+                
+                # Description (if empty)
+                if wiki_data.get('description') and not character.description:
+                    # Limit to reasonable length
+                    description = wiki_data['description'][:500]
+                    updates['description'] = description
+                
+                # Backstory (use description as backstory if empty)
+                if wiki_data.get('description') and not character.backstory:
+                    backstory = wiki_data['description'][:2000]
+                    updates['backstory'] = backstory
+                
+                # Apply updates
+                if updates:
+                    character = self.char_repo.update(character_id, **updates)
+                    print(f"✅ Enhanced {character.name} with wiki data")
+                else:
+                    print(f"ℹ️ {character.name} already has complete data")
+            else:
+                print(f"⚠️ No wiki data found for {character.name}")
         
-        if url:
-            wiki_data = self.wiki_scraper.scrape_character_data(url)
-            
-            # Update character with wiki data
-            updates = {}
-            if wiki_data.get('description') and not character.description:
-                updates['description'] = wiki_data['description']
-            if wiki_data.get('biography') and not character.backstory:
-                updates['backstory'] = wiki_data['biography'][:2000]
-            if wiki_data.get('abilities'):
-                updates['skills'] = wiki_data['abilities'][:10]
-            
-            if updates:
-                character = self.char_repo.update(character_id, **updates)
+        except Exception as e:
+            print(f"⚠️ Wiki enhancement failed for {character.name}: {e}")
+            # Don't raise - enhancement is optional
         
         return character
     

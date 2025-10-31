@@ -43,42 +43,47 @@ function ItemBrowser({
         }
     }, [universe]);
 
-    const loadItems = useCallback(async () => {
-        setLoading(true);
-        try {
-            const cacheKey = `items_${category}_${withImages}_${search}`;
-            const cached = wikiCache.get(universe, cacheKey);
-            
-            if (cached) {
-                console.log(`✅ Loaded ${category} from FRONTEND cache!`);
-                setItems(cached);
-                setLoading(false);
-                return;
-            }
-            
-            const endpoint = withImages 
-                ? `/wiki/items/category/${category}/with-images`
-                : `/wiki/items/category/${category}`;
-            
-            const response = await api.get(endpoint, {
-                params: {
-                    universe,
-                    search: search || undefined,
-                    limit: 50,
-                }
-            });
-            
-            const itemsData = response.data.items || [];
-            setItems(itemsData);
-            
-            wikiCache.set(universe, cacheKey, itemsData);
-            
-        } catch (error) {
-            console.error('Error loading items:', error);
-        } finally {
+//     
+
+// W pliku ItemBrowser.js
+
+const loadItems = useCallback(async () => {
+    setLoading(true);
+    try {
+        const cacheKey = `items_${category}_${withImages}_${search}`;
+        const cached = wikiCache.get(universe, cacheKey);
+        
+        if (cached) {
+            setItems(cached);
             setLoading(false);
+            return;
         }
-    }, [category, search, universe, withImages]);
+        
+        // ✅ Dynamiczne budowanie URL i parametrów
+        const endpoint = withImages 
+            ? `/wiki/items/category/${category}/with-images`
+            : `/wiki/items/category/${category}`;
+
+        const params = {
+            universe: universe,
+            limit: 50,
+            search: search || undefined,
+        };
+
+        const response = await api.get(endpoint, { params });
+        
+        // ✅ MAPOWANIE: Backend używa klucza 'items'
+        const itemsData = response.data.items || [];
+        setItems(itemsData);
+        
+        wikiCache.set(universe, cacheKey, itemsData);
+        
+    } catch (error) {
+        console.error('Error loading items:', error);
+    } finally {
+        setLoading(false);
+    }
+}, [category, search, universe, withImages]);
 
     useEffect(() => {
         loadCategoryCounts();

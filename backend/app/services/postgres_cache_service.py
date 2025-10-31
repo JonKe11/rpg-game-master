@@ -2,6 +2,11 @@
 """
 PostgreSQL Cache Service - Database operations for wiki cache.
 
+✅ FIXED VERSION:
+- Timezone-aware datetimes
+- Deduplication in bulk upsert
+- Complete scraping log method
+
 Features:
 - Fast queries with indexes
 - Bulk operations (upsert batch)
@@ -11,9 +16,10 @@ Features:
 """
 
 from typing import List, Dict, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func, text
+from sqlalchemy.dialects.postgresql import insert
 import logging
 
 from app.models.wiki_article import WikiArticle, ImageCache, ScrapingLog, CategoryCache
@@ -89,7 +95,7 @@ class PostgresCacheService:
         )
         
         if not include_expired:
-            query = query.filter(WikiArticle.expires_at > datetime.now())
+            query = query.filter(WikiArticle.expires_at > datetime.now(timezone.utc))
         
         query = query.offset(offset)
         
@@ -144,7 +150,7 @@ class PostgresCacheService:
         db_query = self.db.query(WikiArticle).filter(
             WikiArticle.universe == universe,
             WikiArticle.title.ilike(f'%{query}%'),
-            WikiArticle.expires_at > datetime.now()
+            WikiArticle.expires_at > datetime.now(timezone.utc)
         )
         
         if category:
@@ -180,7 +186,7 @@ class PostgresCacheService:
         # Check if exists
         existing = self.get_article_by_title(title, universe)
         
-        expires_at = datetime.now() + timedelta(days=self.ttl_days)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=self.ttl_days)
         
         if existing:
             # Update
@@ -188,9 +194,9 @@ class PostgresCacheService:
             existing.content = content
             existing.image_url = image_url
             existing.source_url = source_url
-            existing.scraped_at = datetime.now()
+            existing.scraped_at = datetime.now(timezone.utc)
             existing.expires_at = expires_at
-            existing.last_accessed = datetime.now()
+            existing.last_accessed = datetime.now(timezone.utc)
             
             self.db.commit()
             self.db.refresh(existing)
@@ -215,13 +221,15 @@ class PostgresCacheService:
     def bulk_upsert_articles(
         self,
         articles: List[Dict],
-        batch_size: int = 100
+        batch_size: int = 500
     ) -> Dict[str, int]:
         """
-        Bulk insert/update articles.
+        Bulk insert/update articles with PostgreSQL native upsert.
+        
+        ✅ FIXED: Deduplicates articles before inserting.
         
         Much faster than individual upserts!
-        Processes in batches to avoid memory issues.
+        Uses PostgreSQL's ON CONFLICT for atomic upsert.
         
         Args:
             articles: List of article dicts
@@ -230,99 +238,177 @@ class PostgresCacheService:
         Returns:
             Dict with stats: {'created': X, 'updated': Y, 'failed': Z}
         """
-        stats = {'created': 0, 'updated': 0, 'failed': 0}
+        if not articles:
+            return {'created': 0, 'updated': 0, 'failed': 0}
         
+        # ✅ DEDUPLICATE: Remove duplicates by (title, universe)
+        seen = {}
+        unique_articles = []
+        for article in articles:
+            key = (article['title'], article['universe'])
+            if key not in seen:
+                seen[key] = True
+                unique_articles.append(article)
+        
+        if len(unique_articles) < len(articles):
+            logger.warning(
+                f"⚠️  Removed {len(articles) - len(unique_articles)} duplicate articles"
+            )
+        
+        articles = unique_articles
+        
+        stats = {'created': 0, 'updated': 0, 'failed': 0}
+        expires_at = datetime.now(timezone.utc) + timedelta(days=self.ttl_days)
+        
+        # Process in batches
         for i in range(0, len(articles), batch_size):
             batch = articles[i:i + batch_size]
             
-            for article_data in batch:
-                try:
-                    # Check if exists
-                    existing = self.get_article_by_title(
-                        article_data['title'],
-                        article_data['universe']
-                    )
+            try:
+                # Prepare batch data
+                batch_data = []
+                for article_data in batch:
+                    batch_data.append({
+                        'title': article_data['title'],
+                        'universe': article_data['universe'],
+                        'category': article_data['category'],
+                        'content': article_data.get('content', {}),
+                        'image_url': article_data.get('image_url'),
+                        'image_cached': article_data.get('image_cached', False),
+                        'image_cache_path': article_data.get('image_cache_path'),
+                        'source_url': article_data.get('source_url'),
+                        'expires_at': expires_at,
+                        'access_count': 0
+                    })
+                
+                # PostgreSQL native upsert
+                stmt = insert(WikiArticle).values(batch_data)
+                
+                # On conflict, update all fields except id and scraped_at
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=['title', 'universe'],
+                    set_={
+                        'category': stmt.excluded.category,
+                        'content': stmt.excluded.content,
+                        'image_url': stmt.excluded.image_url,
+                        'image_cached': stmt.excluded.image_cached,
+                        'image_cache_path': stmt.excluded.image_cache_path,
+                        'source_url': stmt.excluded.source_url,
+                        'expires_at': stmt.excluded.expires_at,
+                        'last_accessed': datetime.now(timezone.utc)
+                    }
+                )
+                
+                # Execute
+                result = self.db.execute(stmt)
+                self.db.commit()
+                
+                # Count created vs updated (approximate)
+                # PostgreSQL doesn't return which were created/updated easily,
+                # so we estimate based on existing records
+                for article_data in batch:
+                    existing = self.db.query(WikiArticle).filter(
+                        WikiArticle.title == article_data['title'],
+                        WikiArticle.universe == article_data['universe']
+                    ).first()
                     
-                    if existing:
-                        # Update
-                        existing.category = article_data['category']
-                        existing.content = article_data.get('content', {})
-                        existing.image_url = article_data.get('image_url')
-                        existing.source_url = article_data.get('source_url')
-                        existing.scraped_at = datetime.now()
-                        existing.expires_at = datetime.now() + timedelta(days=self.ttl_days)
+                    if existing and existing.scraped_at < (datetime.now(timezone.utc) - timedelta(seconds=5)):
                         stats['updated'] += 1
                     else:
-                        # Insert
-                        article = WikiArticle(
-                            title=article_data['title'],
-                            universe=article_data['universe'],
-                            category=article_data['category'],
-                            content=article_data.get('content', {}),
-                            image_url=article_data.get('image_url'),
-                            source_url=article_data.get('source_url'),
-                            expires_at=datetime.now() + timedelta(days=self.ttl_days)
-                        )
-                        self.db.add(article)
                         stats['created'] += 1
-                        
-                except Exception as e:
-                    logger.error(f"Error upserting {article_data.get('title')}: {e}")
-                    stats['failed'] += 1
-            
-            # Commit batch
-            try:
-                self.db.commit()
+                
             except Exception as e:
-                logger.error(f"Batch commit error: {e}")
                 self.db.rollback()
+                logger.error(f"Batch commit error: {e}")
+                
+                # Try individual inserts for this batch
+                for article_data in batch:
+                    try:
+                        existing = self.get_article_by_title(
+                            article_data['title'],
+                            article_data['universe']
+                        )
+                        
+                        if existing:
+                            existing.category = article_data['category']
+                            existing.content = article_data.get('content', {})
+                            existing.image_url = article_data.get('image_url')
+                            existing.source_url = article_data.get('source_url')
+                            existing.scraped_at = datetime.now(timezone.utc)
+                            existing.expires_at = expires_at
+                            stats['updated'] += 1
+                        else:
+                            article = WikiArticle(
+                                title=article_data['title'],
+                                universe=article_data['universe'],
+                                category=article_data['category'],
+                                content=article_data.get('content', {}),
+                                image_url=article_data.get('image_url'),
+                                source_url=article_data.get('source_url'),
+                                expires_at=expires_at
+                            )
+                            self.db.add(article)
+                            stats['created'] += 1
+                        
+                        self.db.commit()
+                        
+                    except Exception as e2:
+                        self.db.rollback()
+                        logger.error(f"Failed to insert article {article_data.get('title')}: {e2}")
+                        stats['failed'] += 1
         
         logger.info(f"Bulk upsert complete: {stats}")
         return stats
     
     def mark_image_cached(
         self,
-        article_id: int,
+        title: str,
+        universe: str,
         cache_path: str
-    ):
+    ) -> bool:
         """
         Mark article's image as cached.
         
         Args:
-            article_id: Article ID
-            cache_path: Path to cached image file
+            title: Article title
+            universe: Universe name
+            cache_path: Local cache path
+            
+        Returns:
+            True if updated
         """
-        article = self.db.query(WikiArticle).filter(
-            WikiArticle.id == article_id
-        ).first()
+        article = self.get_article_by_title(title, universe)
         
-        if article:
-            article.image_cached = True
-            article.image_cache_path = cache_path
-            self.db.commit()
+        if not article:
+            return False
+        
+        article.image_cached = True
+        article.image_cache_path = cache_path
+        article.last_accessed = datetime.now(timezone.utc)
+        
+        self.db.commit()
+        return True
     
     # ============================================
-    # CATEGORY STATISTICS
+    # CATEGORY OPERATIONS
     # ============================================
     
     def get_category_counts(self, universe: str) -> Dict[str, int]:
         """
         Get article counts per category.
         
-        Uses SQL GROUP BY - very fast!
-        
         Args:
             universe: Universe name
             
         Returns:
-            Dict: {category: count}
+            Dict: category -> count
         """
         results = self.db.query(
             WikiArticle.category,
             func.count(WikiArticle.id)
         ).filter(
             WikiArticle.universe == universe,
-            WikiArticle.expires_at > datetime.now()
+            WikiArticle.expires_at > datetime.now(timezone.utc)
         ).group_by(
             WikiArticle.category
         ).all()
@@ -331,9 +417,7 @@ class PostgresCacheService:
     
     def update_category_cache(self, universe: str):
         """
-        Update pre-computed category cache.
-        
-        Stores counts in category_cache table for instant access.
+        Update category cache with current stats.
         
         Args:
             universe: Universe name
@@ -342,38 +426,39 @@ class PostgresCacheService:
         
         for category, count in counts.items():
             # Count articles with images
-            images_count = self.db.query(func.count(WikiArticle.id)).filter(
+            with_images = self.db.query(func.count(WikiArticle.id)).filter(
                 WikiArticle.universe == universe,
                 WikiArticle.category == category,
                 WikiArticle.image_cached == True,
-                WikiArticle.expires_at > datetime.now()
+                WikiArticle.expires_at > datetime.now(timezone.utc)
             ).scalar()
             
-            # Upsert cache entry
-            existing = self.db.query(CategoryCache).filter(
+            # Upsert cache
+            cache = self.db.query(CategoryCache).filter(
                 CategoryCache.universe == universe,
                 CategoryCache.category == category
             ).first()
             
-            if existing:
-                existing.article_count = count
-                existing.articles_with_images = images_count
-                existing.last_updated = datetime.now()
+            if cache:
+                cache.article_count = count
+                cache.articles_with_images = with_images
+                cache.last_updated = datetime.now(timezone.utc)
             else:
-                cache_entry = CategoryCache(
+                cache = CategoryCache(
                     universe=universe,
                     category=category,
                     article_count=count,
-                    articles_with_images=images_count
+                    articles_with_images=with_images
                 )
-                self.db.add(cache_entry)
+                self.db.add(cache)
+            
+            self.db.commit()
         
-        self.db.commit()
         logger.info(f"Category cache updated for {universe}")
     
-    def get_category_cache(self, universe: str) -> Dict[str, Dict]:
+    def get_category_cache(self, universe: str) -> Dict:
         """
-        Get cached category statistics (instant!).
+        Get cached category stats.
         
         Args:
             universe: Universe name
@@ -426,7 +511,7 @@ class PostgresCacheService:
         
         if existing:
             # Update access time
-            existing.last_accessed = datetime.now()
+            existing.last_accessed = datetime.now(timezone.utc)
             existing.access_count += 1
             self.db.commit()
             return existing
@@ -496,7 +581,7 @@ class PostgresCacheService:
         
         Args:
             universe: Universe name
-            operation_type: Operation type (e.g., 'categorize_articles')
+            operation_type: Operation type (e.g., 'startup_prefetch_all')
             
         Returns:
             ScrapingLog object
@@ -504,7 +589,8 @@ class PostgresCacheService:
         log = ScrapingLog(
             universe=universe,
             operation_type=operation_type,
-            status='running'
+            status='running',
+            started_at=datetime.now(timezone.utc)
         )
         
         self.db.add(log)
@@ -518,45 +604,61 @@ class PostgresCacheService:
         self,
         log_id: int,
         stats: Dict,
-        status: str = 'completed',
-        error_message: Optional[str] = None
+        status: str = 'completed'
     ):
         """
         Complete scraping operation log.
         
+        ✅ FIXED: Handles timezone-aware datetimes properly.
+        
         Args:
             log_id: Log ID
             stats: Statistics dict
-            status: Status ('completed' or 'failed')
-            error_message: Optional error message
+            status: Status ('completed', 'failed', 'cancelled')
         """
         log = self.db.query(ScrapingLog).filter(
             ScrapingLog.id == log_id
         ).first()
         
         if not log:
-            logger.error(f"Log #{log_id} not found")
+            logger.warning(f"Scraping log #{log_id} not found")
             return
         
+        # ✅ Always use timezone-aware datetime
         log.status = status
-        log.completed_at = datetime.now()
-        log.articles_processed = stats.get('articles_processed', 0)
-        log.articles_created = stats.get('articles_created', 0)
-        log.articles_updated = stats.get('articles_updated', 0)
+        log.completed_at = datetime.now(timezone.utc)
+        
+        # Calculate duration safely
+        if log.completed_at and log.started_at:
+            completed = log.completed_at
+            started = log.started_at
+            
+            # Ensure both are timezone-aware
+            if completed.tzinfo is None:
+                completed = completed.replace(tzinfo=timezone.utc)
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            
+            log.duration_seconds = int((completed - started).total_seconds())
+        else:
+            log.duration_seconds = 0
+        
+        # Update statistics
+        log.articles_fetched = stats.get('articles_total', 0)
+        log.articles_cached = (
+            stats.get('articles_created', 0) + 
+            stats.get('articles_updated', 0)
+        )
         log.images_downloaded = stats.get('images_downloaded', 0)
         log.images_cached = stats.get('images_cached', 0)
-        log.images_failed = stats.get('images_failed', 0)
-        log.errors_count = stats.get('errors_count', 0)
-        log.error_message = error_message
+        log.errors = stats.get('errors', [])
         
-        # Calculate duration
-        if log.started_at:
-            duration = (log.completed_at - log.started_at).total_seconds()
-            log.duration_seconds = int(duration)
-        
-        self.db.commit()
-        
-        logger.info(f"Completed scraping log #{log_id}: {status}")
+        try:
+            self.db.commit()
+            logger.info(f"✅ Scraping log #{log_id} completed: {status}")
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Failed to complete scraping log: {e}")
     
     def get_recent_logs(
         self,
@@ -597,7 +699,7 @@ class PostgresCacheService:
             Number of deleted articles
         """
         query = self.db.query(WikiArticle).filter(
-            WikiArticle.expires_at < datetime.now()
+            WikiArticle.expires_at < datetime.now(timezone.utc)
         )
         
         if universe:
@@ -623,13 +725,13 @@ class PostgresCacheService:
         # Article stats
         total_articles = self.db.query(func.count(WikiArticle.id)).filter(
             WikiArticle.universe == universe,
-            WikiArticle.expires_at > datetime.now()
+            WikiArticle.expires_at > datetime.now(timezone.utc)
         ).scalar()
         
         articles_with_images = self.db.query(func.count(WikiArticle.id)).filter(
             WikiArticle.universe == universe,
             WikiArticle.image_cached == True,
-            WikiArticle.expires_at > datetime.now()
+            WikiArticle.expires_at > datetime.now(timezone.utc)
         ).scalar()
         
         # Category counts
