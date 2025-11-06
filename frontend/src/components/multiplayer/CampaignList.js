@@ -146,7 +146,7 @@ function CampaignList({ character, onCreateNew, onJoinCampaign }) {
                   </div>
                 </div>
 
-                {/* Action Button */}
+                {/* ✅ FIXED: Action Button - umożliwia powrót do aktywnej kampanii */}
                 {campaign.status === 'lobby' ? (
                   <button
                     onClick={() => handleJoin(campaign)}
@@ -154,12 +154,19 @@ function CampaignList({ character, onCreateNew, onJoinCampaign }) {
                   >
                     Join Lobby
                   </button>
+                ) : campaign.status === 'active' ? (
+                  <button
+                    onClick={() => handleJoin(campaign)}
+                    className="w-full bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-semibold transition"
+                  >
+                    🎮 Join Game
+                  </button>
                 ) : (
                   <button
                     disabled
                     className="w-full bg-gray-600 px-4 py-2 rounded-lg font-semibold cursor-not-allowed"
                   >
-                    In Progress
+                    {campaign.status}
                   </button>
                 )}
               </div>

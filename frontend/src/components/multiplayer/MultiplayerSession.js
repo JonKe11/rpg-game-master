@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../../api/axiosConfig';
-import LocationSelector from './LocationSelector';  // ✨ DODANE!
-import ItemBrowser from './ItemBrowser';            // ✨ DODANE!
+import LocationSelector from './LocationSelector';
+import ItemBrowser from './ItemBrowser';
+import PlayerInventoryPanel from './PlayerInventoryPanel';  // ✅ NOWE
+import GMPlayerManager from './GMPlayerManager';            // ✅ NOWE
 
 function MultiplayerSession({ campaign, character, onEnd }) {
   const [messages, setMessages] = useState([]);
@@ -13,14 +15,16 @@ function MultiplayerSession({ campaign, character, onEnd }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [isGM, setIsGM] = useState(false);
   
-  // ✨ DODANE STATE!
   const [currentLocation, setCurrentLocation] = useState('Unknown');
   const [showLocationSelector, setShowLocationSelector] = useState(false);
   const [showItemBrowser, setShowItemBrowser] = useState(false);
   
+  // ✅ NOWE: Inventory & GM Panel
+  const [showInventory, setShowInventory] = useState(false);
+  const [showGMPanel, setShowGMPanel] = useState(false);
+  
   const messagesEndRef = useRef(null);
 
-  // ✅ DEBUGOWANIE - sprawdź co się dzieje z GM detection
   useEffect(() => {
     console.log('🎮 Campaign data received:', campaign);
     
@@ -71,7 +75,6 @@ function MultiplayerSession({ campaign, character, onEnd }) {
       const data = JSON.parse(event.data);
       console.log('📨 Received:', data);
       
-      // ✨ DODANE: Handle location changes
       if (data.type === 'location_change' && data.metadata?.location) {
         setCurrentLocation(data.metadata.location);
       }
@@ -105,13 +108,11 @@ function MultiplayerSession({ campaign, character, onEnd }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // ✨ NOWA FUNKCJA!
   const handleLocationChange = async (newLocation) => {
-    if (!isGM) return; // Tylko GM może zmieniać
+    if (!isGM) return;
     
     setCurrentLocation(newLocation);
     
-    // Wyślij przez WebSocket
     try {
       await api.post(`/multiplayer/campaigns/${campaign.id}/messages`, {
         message_type: 'location_change',
@@ -126,17 +127,15 @@ function MultiplayerSession({ campaign, character, onEnd }) {
     }
   };
 
-  // ✨ NOWA FUNKCJA!
-  const handleItemSelect = async (itemName) => {
-    if (!isGM) return; // Tylko GM może dodawać itemy
+  const handleItemSelect = async (item) => {
+    if (!isGM) return;
     
-    // Wyślij przez WebSocket
     try {
       await api.post(`/multiplayer/campaigns/${campaign.id}/messages`, {
         message_type: 'gm_event',
-        content: `🎒 GM added item: ${itemName}`,
+        content: `🎒 GM added item: ${item.name}`,
         character_id: character.id,
-        metadata: { item: itemName }
+        metadata: { item: item.name }
       });
     } catch (error) {
       console.error('Failed to add item:', error);
@@ -148,14 +147,13 @@ function MultiplayerSession({ campaign, character, onEnd }) {
     
     if (!inputMessage.trim() || !currentUser) return;
 
-    const typeToSend = customType || messageType;
+    const finalType = customType || messageType;
 
     try {
       await api.post(`/multiplayer/campaigns/${campaign.id}/messages`, {
-        message_type: typeToSend,
+        message_type: finalType,
         content: inputMessage,
-        character_id: character.id,
-        metadata: {}
+        character_id: character.id
       });
 
       setInputMessage('');
@@ -165,11 +163,13 @@ function MultiplayerSession({ campaign, character, onEnd }) {
     }
   };
 
+  // ✅ ZACHOWANE z oryginału
   const handleQuickAction = (text, type = 'player_action') => {
     setInputMessage(text);
     setMessageType(type);
   };
 
+  // ✅ ZACHOWANE z oryginału
   const handleGMAction = (type) => {
     setMessageType(type);
     const placeholders = {
@@ -180,14 +180,14 @@ function MultiplayerSession({ campaign, character, onEnd }) {
     setInputMessage(placeholders[type] || '');
   };
 
+  // ✅ ZACHOWANE z oryginału - PEŁNE FORMATOWANIE
   const renderMessage = (msg, index) => {
     const isSystem = msg.type === 'system';
     const isMyMessage = msg.user_id === currentUser?.id;
     const isGMMessage = msg.type?.startsWith('gm_');
     const isDiceRoll = msg.type === 'dice_roll';
-    const isLocationChange = msg.type === 'location_change';  // ✨ DODANE!
+    const isLocationChange = msg.type === 'location_change';
 
-    // ✨ LOCATION CHANGE MESSAGE
     if (isLocationChange) {
       return (
         <div key={index} className="bg-yellow-900 rounded-lg p-3 border-l-4 border-yellow-500 max-w-md mx-auto">
@@ -250,9 +250,9 @@ function MultiplayerSession({ campaign, character, onEnd }) {
 
   return (
     <div className="fixed inset-0 flex bg-gray-900">
-      {/* ✨ MAIN CONTENT - FLEX LAYOUT */}
+      {/* MAIN CONTENT - FLEX LAYOUT */}
       <div className={`flex-1 flex flex-col transition-all ${
-        showLocationSelector || showItemBrowser ? 'w-1/2' : 'w-full'
+        showLocationSelector || showItemBrowser || showInventory || showGMPanel ? 'w-1/2' : 'w-full'
       }`}>
         {/* Header */}
         <div className="bg-gray-800 border-b border-gray-700 p-4 flex-shrink-0">
@@ -264,69 +264,93 @@ function MultiplayerSession({ campaign, character, onEnd }) {
                   {connected ? '🟢 Connected' : '🔴 Disconnected'}
                   {isGM && <span className="ml-2 text-yellow-400">👑 Game Master</span>}
                 </p>
-                {/* ✨ LOKACJA */}
                 <p className="text-yellow-400 text-sm">
                   📍 {currentLocation}
                 </p>
               </div>
             </div>
             
-            {/* ✨ GM TOOLS BUTTONS */}
+            {/* GM TOOLS BUTTONS */}
             <div className="flex gap-2">
               {isGM && (
                 <>
                   <button
-                    onClick={() => setShowLocationSelector(!showLocationSelector)}
+                    onClick={() => {
+                      setShowLocationSelector(!showLocationSelector);
+                      setShowItemBrowser(false);
+                      setShowGMPanel(false);
+                      setShowInventory(false);
+                    }}
                     className={`px-4 py-2 rounded-lg font-semibold transition ${
-                      showLocationSelector 
-                        ? 'bg-yellow-600 hover:bg-yellow-700' 
-                        : 'bg-gray-700 hover:bg-gray-600'
+                      showLocationSelector ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
                     }`}
                   >
                     📍 Location
                   </button>
                   <button
-                    onClick={() => setShowItemBrowser(!showItemBrowser)}
+                    onClick={() => {
+                      setShowItemBrowser(!showItemBrowser);
+                      setShowLocationSelector(false);
+                      setShowGMPanel(false);
+                      setShowInventory(false);
+                    }}
                     className={`px-4 py-2 rounded-lg font-semibold transition ${
-                      showItemBrowser 
-                        ? 'bg-purple-600 hover:bg-purple-700' 
-                        : 'bg-gray-700 hover:bg-gray-600'
+                      showItemBrowser ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
                     }`}
                   >
                     🎒 Items
                   </button>
+                  <button
+                    onClick={() => {
+                      setShowGMPanel(!showGMPanel);
+                      setShowLocationSelector(false);
+                      setShowItemBrowser(false);
+                      setShowInventory(false);
+                    }}
+                    className={`px-4 py-2 rounded-lg font-semibold transition ${
+                      showGMPanel ? 'bg-purple-600' : 'bg-gray-700 hover:bg-gray-600'
+                    }`}
+                  >
+                    👑 Players
+                  </button>
                 </>
               )}
+              
+              {/* PLAYER INVENTORY BUTTON */}
+              {!isGM && (
+                <button
+                  onClick={() => {
+                    setShowInventory(!showInventory);
+                    setShowLocationSelector(false);
+                    setShowItemBrowser(false);
+                    setShowGMPanel(false);
+                  }}
+                  className={`px-4 py-2 rounded-lg font-semibold transition ${
+                    showInventory ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
+                  }`}
+                >
+                  🎒 Inventory
+                </button>
+              )}
+              
               <button
                 onClick={onEnd}
-                className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition"
+                className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-semibold transition"
               >
-                End
+                Leave
               </button>
             </div>
           </div>
         </div>
 
-        {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="max-w-4xl mx-auto space-y-3 pb-32">
-            {messages.length === 0 && (
-              <div className="text-center text-gray-400 py-8">
-                <p className="text-lg">🎲 Campaign has started!</p>
-                <p className="text-sm mt-2">
-                  {isGM ? 'Start the adventure with your narration...' : 'Wait for the GM to begin...'}
-                </p>
-              </div>
-            )}
-            
-            {messages.map((msg, index) => renderMessage(msg, index))}
-            
-            <div ref={messagesEndRef} />
-          </div>
+        {/* Messages Area */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {messages.map((msg, index) => renderMessage(msg, index))}
+          <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area - FIXED BOTTOM */}
-        <div className="bg-gray-800 border-t border-gray-700 p-4">
+        {/* Input Area */}
+        <div className="bg-gray-800 border-t border-gray-700 p-4 flex-shrink-0">
           <div className="max-w-4xl mx-auto">
             
             {/* GM CONTROLS - tylko dla GM */}
@@ -388,52 +412,60 @@ function MultiplayerSession({ campaign, character, onEnd }) {
                 type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder={isGM ? "Narrate the story..." : "What do you do? Type your action..."}
-                className="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={!connected}
+                placeholder={isGM ? "Narrate, describe events..." : "Describe your action..."}
+                className="flex-1 bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <button
                 type="submit"
-                disabled={!connected || !inputMessage.trim()}
-                className={`${
-                  isGM ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'
-                } disabled:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition`}
+                className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg font-semibold transition"
               >
                 Send
               </button>
             </form>
-
-            <p className="text-gray-500 text-xs mt-2 text-center">
-              {isGM ? (
-                <span>Playing as: <span className="text-yellow-400 font-bold">Game Master 🎭</span></span>
-              ) : (
-                <span>Playing as: <span className="text-white">{character.name}</span> ({character.class_type})</span>
-              )}
-            </p>
           </div>
         </div>
       </div>
 
-      {/* ✨ LOCATION SELECTOR SIDEBAR (GM ONLY!) */}
-      {showLocationSelector && isGM && (
-        <div className="w-1/2 border-l border-gray-700 overflow-y-auto bg-gray-900">
-          <LocationSelector
-            currentLocation={currentLocation}
-            onLocationChange={handleLocationChange}
-            universe={campaign.universe || 'star_wars'}
-            isGM={isGM}
-          />
-        </div>
-      )}
+      {/* SIDE PANEL - GM Tools & Player Inventory */}
+      {(showLocationSelector || showItemBrowser || showInventory || showGMPanel) && (
+        <div className="w-1/2 bg-gray-800 border-l border-gray-700 overflow-y-auto">
+          <div className="p-4">
+            {/* Location Selector */}
+            {showLocationSelector && (
+              <LocationSelector
+                universe={campaign.universe}
+                onLocationSelect={handleLocationChange}
+                isGM={isGM}
+              />
+            )}
 
-      {/* ✨ ITEM BROWSER SIDEBAR (GM ONLY!) */}
-      {showItemBrowser && isGM && (
-        <div className="w-1/2 border-l border-gray-700 overflow-y-auto bg-gray-900">
-          <ItemBrowser
-            onItemSelect={handleItemSelect}
-            universe={campaign.universe || 'star_wars'}
-            isGM={isGM}
-          />
+            {/* Item Browser (old GM item browser) */}
+            {showItemBrowser && (
+              <ItemBrowser
+                onItemSelect={handleItemSelect}
+                universe={campaign.universe}
+                isGM={isGM}
+              />
+            )}
+
+            {/* Player Inventory */}
+            {showInventory && !isGM && currentUser && (
+              <PlayerInventoryPanel
+                campaignId={campaign.id}
+                userId={currentUser.id}
+                isGM={false}
+              />
+            )}
+
+            {/* GM Player Manager */}
+            {showGMPanel && isGM && (
+              <GMPlayerManager
+                campaign={campaign}
+                isGM={isGM}
+                universe={campaign.universe}
+              />
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -287,6 +287,39 @@ class StartupPrefetchService:
             # Run in executor to not block event loop
             loop = asyncio.get_event_loop()
             
+            # ✅ NOWA FUNKCJA POMOCNICZA (wklej ją tutaj)
+            def _parse_categories_for_infobox(categories: List[str]) -> Dict:
+                """
+                Parsuje listę kategorii, aby wyciągnąć dane hierarchii.
+                Przykład: "Planets in the Outer Rim Territories" -> {"Region": "Outer Rim Territories"}
+                """
+                infobox = {}
+                if not categories:
+                    return infobox
+
+                for cat in categories:
+                    # Sprawdź Region
+                    if cat.startswith("Planets in the "):
+                        infobox["Region"] = cat.replace("Planets in the ", "").strip()
+                    
+                    # Sprawdź Sektor
+                    elif cat.endswith(" sector"):
+                        infobox["Sector"] = cat
+                    elif cat.startswith("Planets in ") and cat.endswith(" sector"):
+                        infobox["Sector"] = cat.replace("Planets in ", "").strip()
+
+                    # Sprawdź System
+                    elif cat.endswith(" system") or cat.endswith(" system locations"):
+                        system_name = cat.replace(" locations", "").strip()
+                        infobox["System"] = system_name
+                    
+                    # Sprawdź powiązanie "dziecka" (lokacji na planecie)
+                    elif cat.endswith(" locations"):
+                        planet_name = cat.replace(" locations", "").strip()
+                        infobox["Planet"] = planet_name
+                        
+                return infobox
+            
             for category, articles in categorized_data.items():
                 logger.info(f"   📦 {category}: {len(articles):,} articles...")
                 
@@ -302,12 +335,20 @@ class StartupPrefetchService:
                             image_url = article.get('image_url') or article.get('thumbnail')
                             source_url = article.get('url')
                             
+                            # ✅ NOWA WERSJA (wewnątrz _stage_1_5_write_to_postgresql)
+
                             # Build content dict from ALL article fields
                             content = {}
                             for key, value in article.items():
                                 # Skip fields we store separately
                                 if key not in ['title', 'name', 'image_url', 'thumbnail', 'url']:
                                     content[key] = value
+                            
+                            # ✅✅✅ TUTAJ MAGIA ✅✅✅
+                            # Sparsuj kategorie (które są w 'content') i dodaj je z powrotem
+                            raw_categories = content.get('categories', [])
+                            parsed_infobox = _parse_categories_for_infobox(raw_categories)
+                            content.update(parsed_infobox) # Scal sparsowane dane
                             
                             # Add description if exists
                             if 'abstract' in article:
@@ -319,7 +360,7 @@ class StartupPrefetchService:
                                 'title': title,
                                 'universe': universe,
                                 'category': category,
-                                'content': content,  # ✅ Full content!
+                                'content': content,  # ✅ Teraz zawiera sparsowane klucze!
                                 'image_url': image_url,
                                 'source_url': source_url
                             })
@@ -414,7 +455,7 @@ class StartupPrefetchService:
                 logger.info(f"   🎯 {category.upper()}")
                 
                 # Get articles from PostgreSQL
-                articles = await self.postgres_service.get_articles_with_images(
+                articles = hybrid_service.pg_cache.get_articles_by_category(
                     universe=universe,
                     category=category,
                     limit=5000  # ✅ Zwiększone z 1000 do 5000!

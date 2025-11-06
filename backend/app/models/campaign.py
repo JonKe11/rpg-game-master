@@ -48,3 +48,4 @@ class MultiplayerCampaign(Base):
     
     # Relationships
     messages = relationship("CampaignMessage", back_populates="campaign", cascade="all, delete-orphan")
+    inventory_items = relationship("PlayerInventory", back_populates="campaign", cascade="all, delete-orphan")

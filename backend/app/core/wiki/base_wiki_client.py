@@ -906,14 +906,21 @@ class BaseWikiClient:
                 article_ids = [a['id'] for a in articles]
                 details = await self.get_article_details_batch(article_ids)
                 
+                # ✅ NOWA, POPRAWNA WERSJA (do wklejenia w backend/app/core/wiki/base_wiki_client.py)
+
                 # Enrich
                 for article in articles:
                     article_id = article['id']
                     detail = details.get(str(article_id), {})
                     
-                    article['abstract'] = detail.get('abstract', '')
-                    article['thumbnail'] = detail.get('thumbnail')
-                    article['image_url'] = detail.get('thumbnail')
+                    # ✅ Scal cały słownik 'detail' z 'article'
+                    # To doda 'abstract', 'thumbnail' ORAZ wszystkie klucze infoboxa
+                    # (jak 'Region', 'Sector', 'System', 'Planet' itd.)
+                    article.update(detail)
+                    
+                    # Upewnij się, że image_url jest ustawiony (fallback na thumbnail)
+                    if not article.get('image_url'):
+                        article['image_url'] = article.get('thumbnail')
         
         logger.info(f"\n✅ SMART FETCH COMPLETE!")
         logger.info("="*60 + "\n")

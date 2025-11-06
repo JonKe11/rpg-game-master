@@ -181,11 +181,17 @@ const loadItems = useCallback(async () => {
                         const itemName = typeof item === 'string' ? item : item.name;
                         const imageUrl = typeof item === 'object' ? item.image_url : null;
                         const description = typeof item === 'object' ? item.description : null;
-                        
+
+                        const itemObject = {
+                            name: itemName,
+                            image_url: imageUrl,
+                            description: description,
+                            category: category // Dodaj aktualną kategorię!
+                        }
                         return (
                             <div
                                 key={itemName}
-                                onClick={() => onItemSelect(itemName)}
+                                onClick={() => onItemSelect(itemObject)}
                                 className="bg-gray-700 hover:bg-gray-600 rounded-lg p-4 cursor-pointer transition hover:scale-105"
                             >
                                 {withImages && imageUrl ? (

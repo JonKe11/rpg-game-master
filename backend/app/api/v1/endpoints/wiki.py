@@ -8,6 +8,7 @@ Features:
 - Cache management endpoints
 - ✅ NEW: Search and single article endpoints for frontend
 - ✅ FIXED: get_article_by_title now uses PostgreSQL directly
+- ✅ NEW: Hierarchical location tree endpoints (v2 - simplified hierarchy)
 """
 from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from fastapi.responses import StreamingResponse
@@ -15,11 +16,13 @@ from typing import Optional, Dict, List
 from io import BytesIO
 import logging
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app.services.unified_cache_service import UnifiedCacheService
 from app.core.scraper.image_fetcher import ImageFetcher
 from app.core.dependencies import get_db
 from app.services.postgres_cache_service import PostgresCacheService
+from app.models.wiki_article import WikiArticle
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -58,6 +61,123 @@ def fetch_single_image_for_endpoint(args: tuple) -> tuple:
         logger.info(f"  ❌ [{idx:3d}/{total}] {name[:40]:40s} - failed")
     
     return (name, success, was_cached)
+
+# ============================================
+# ✅ NEW: HIERARCHY MODELS
+# ============================================
+class WikiArticleInfo(BaseModel):
+    """Simplified article info for tree responses."""
+    name: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    image_cached: bool = False
+
+    class Config:
+        from_attributes = True # ✅ Poprawka z orm_mode na from_attributes
+
+def format_article_info(article: WikiArticle) -> WikiArticleInfo:
+    """Helper to convert WikiArticle to WikiArticleInfo."""
+    return WikiArticleInfo(
+        name=article.title,
+        description=article.content.get('description') if article.content else None,
+        image_url=article.image_url,
+        image_cached=article.image_cached
+    )
+
+# ============================================
+# ✅ NEW: HIERARCHICAL LOCATION TREE ROUTER (v2)
+# ============================================
+tree_router = APIRouter(prefix="/locations/tree", tags=["Wiki - Location Tree"])
+
+@tree_router.get("/regions", response_model=List[str])
+async def get_location_regions(
+    universe: str = Query(default="star_wars"),
+    db: Session = Depends(get_db)
+):
+    """
+    STEP 1: Get all unique Regions (e.g., "Outer Rim Territories").
+    
+    Fetches distinct 'Region' values from the 'content' field of 'planets'.
+    """
+    pg_service = PostgresCacheService(db)
+    return pg_service.get_distinct_jsonb_values(
+        universe=universe,
+        category="planets",
+        field="Region" # To jest klucz, który dodaliśmy w parserze
+    )
+
+@tree_router.get("/systems-by-region", response_model=List[str])
+async def get_location_systems_by_region(
+    region: str,
+    universe: str = Query(default="star_wars"),
+    db: Session = Depends(get_db)
+):
+    """
+    STEP 2: Get unique Systems within a specific Region.
+    
+    Fetches distinct 'System' values where 'Region' matches.
+    (Pominięto krok Sektor, ponieważ dane nie są łatwo dostępne)
+    """
+    pg_service = PostgresCacheService(db)
+    filters = {"Region": region} # Filtrujemy Sytemy po Regionie
+    return pg_service.get_distinct_jsonb_values(
+        universe=universe,
+        category="planets",
+        field="System", # Szukamy klucza "System"
+        filters=filters
+    )
+
+@tree_router.get("/planets-by-system", response_model=List[WikiArticleInfo])
+async def get_planets_in_system(
+    system: str,
+    universe: str = Query(default="star_wars"),
+    limit: int = Query(default=100),
+    db: Session = Depends(get_db)
+):
+    """
+    STEP 3: Get Planets within a specific System.
+    
+    Fetches 'planet' articles where 'System' matches.
+    """
+    pg_service = PostgresCacheService(db)
+    filters = {"System": system}
+    articles = pg_service.get_articles_by_jsonb_filters(
+        universe=universe,
+        category="planets",
+        filters=filters,
+        with_images=True,
+        limit=limit
+    )
+    # TODO: Add image prefetching here if needed, like in /locations/planets
+    return [format_article_info(art) for art in articles]
+
+@tree_router.get("/on-planet", response_model=List[WikiArticleInfo])
+async def get_locations_on_planet(
+    planet: str,
+    universe: str = Query(default="star_wars"),
+    limit: int = Query(default=100),
+    db: Session = Depends(get_db)
+):
+    """
+    STEP 4: Get specific Locations ON a Planet (e.g., "Mos Eisley").
+    
+    Fetches 'locations' articles where 'Planet' matches.
+    """
+    pg_service = PostgresCacheService(db)
+    filters = {"Planet": planet} # Klucz "Planet" jest parsowany z "X locations"
+    articles = pg_service.get_articles_by_jsonb_filters(
+        universe=universe,
+        category="locations", # Ważne: szukamy w kategorii "locations"
+        filters=filters,
+        with_images=True,
+        limit=limit
+    )
+    # TODO: Add image prefetching here if needed
+    return [format_article_info(art) for art in articles]
+
+# Include the new router in the main router
+router.include_router(tree_router)
+
 
 # ============================================
 # IMAGE PROXY
@@ -168,9 +288,9 @@ async def get_canon_category(
     }
 
 # ============================================
-# LOCATIONS (PLANETS)
+# LOCATIONS (PLANETS) - [LEGACY ENDPOINTS]
 # ============================================
-@router.get("/locations/planets")
+@router.get("/locations/planets", tags=["Wiki - Locations (Legacy)"])
 async def get_planets_with_images(
     universe: str = Query(default="star_wars"),
     limit: int = Query(default=100, le=2000),
@@ -182,6 +302,8 @@ async def get_planets_with_images(
     Get planets WITH parallel image prefetch.
     
     ✅ FIXED: Now uses 'planets' category (not 'locations'!)
+    
+    NOTE: This is a flat list. For hierarchy, use /locations/tree/planets
     """
     logger.info(f"\n🌍 Fetching {limit} planets with images...")
     
@@ -233,16 +355,16 @@ async def get_planets_with_images(
         'planets': planets_data
     }
 
-@router.get("/locations/by-planet")
+@router.get("/locations/by-planet", tags=["Wiki - Locations (Legacy)"])
 async def get_locations_by_planet(
     universe: str = Query(default="star_wars"),
     planet: str = Query(...),
     limit: int = Query(default=500, le=5000)
 ):
     """
-    Get specific locations ON a planet.
+    Get specific locations ON a planet (LEGACY - uses string matching).
     
-    Note: This uses 'locations' category (cities, bases, etc).
+    NOTE: Deprecated. Use /locations/tree/on-planet for better accuracy.
     """
     # Use locations category (not planets!)
     all_locations = cache_service.get_locations(universe=universe)
@@ -262,7 +384,7 @@ async def get_locations_by_planet(
 # ============================================
 # ITEMS
 # ============================================
-@router.get("/items/all")
+@router.get("/items/all", tags=["Wiki - Items"])
 async def get_all_items_summary(universe: str = Query(default="star_wars")):
     """Get summary of all item categories."""
     return {
@@ -291,7 +413,7 @@ async def get_all_items_summary(universe: str = Query(default="star_wars")):
         }
     }
 
-@router.get("/items/category/{category}")
+@router.get("/items/category/{category}", tags=["Wiki - Items"])
 async def get_items_by_category(
     category: str,
     universe: str = Query(default="star_wars"),
@@ -339,7 +461,7 @@ async def get_items_by_category(
         'items': paginated_items
     }
 
-@router.get("/items/category/{category}/with-images")
+@router.get("/items/category/{category}/with-images", tags=["Wiki - Items"])
 async def get_items_with_images(
     category: str,
     universe: str = Query(default="star_wars"),
@@ -417,7 +539,7 @@ async def get_items_with_images(
 # ============================================
 # ✅ NEW: SEARCH
 # ============================================
-@router.get("/{universe}/search")
+@router.get("/{universe}/search", tags=["Wiki - Search & Article"])
 async def search_articles(
     universe: str,
     q: str = Query(..., min_length=1, description="Search query"),
@@ -493,7 +615,7 @@ async def search_articles(
 # ============================================
 # ✅ FIXED: GET SINGLE ARTICLE (uses PostgreSQL)
 # ============================================
-@router.get("/{universe}/{category}/{title}")
+@router.get("/{universe}/{category}/{title}", tags=["Wiki - Search & Article"])
 async def get_article_by_title(
     universe: str,
     category: str,
@@ -569,14 +691,14 @@ async def get_article_by_title(
 # ============================================
 # CACHE MANAGEMENT
 # ============================================
-@router.get("/cache/stats")
+@router.get("/cache/stats", tags=["Wiki - Cache Management"])
 async def get_cache_stats(universe: str = Query(default="star_wars")):
     """Get cache statistics."""
     cache_info = cache_service.get_cache_info(universe)
     
     return cache_info
 
-@router.post("/cache/invalidate")
+@router.post("/cache/invalidate", tags=["Wiki - Cache Management"])
 async def invalidate_cache(
     universe: str = Query(default="star_wars"),
     clear_images: bool = Query(default=False)
