@@ -1,370 +1,199 @@
 # backend/app/core/ai/canon_validator.py
 """
-Dynamic canon validation using wiki cache as source of truth.
-
-UPDATED: Works with new FANDOM API system.
-Maintains backward compatibility.
+Dynamic canon validation using PostgreSQL as the source of truth.
 """
 
 from typing import Set, List, Dict, Optional
 import logging
+import re
 
-from app.core.scraper.wiki_content_cache import WikiContentCache
-from app.core.scraper.wiki_scraper import WikiScraper
+# ⛔️ USUNIĘTE: Stare importy cache'a plików JSON
+# from app.core.scraper.wiki_content_cache import WikiContentCache
+# from app.core.scraper.wiki_scraper import WikiScraper
+
+# ✅ NOWE IMPORTY:
+from app.models.database import SessionLocal
+from app.services.postgres_cache_service import PostgresCacheService
+from app.models.wiki_article import article_to_dict # Załóżmy, że ta funkcja istnieje lub przenieś ją tutaj
 
 logger = logging.getLogger(__name__)
+
+# ✅ NOWA FUNKCJA POMOCNICZA (jeśli nie masz jej globalnie)
+def article_to_dict(article) -> Dict:
+    """Konwertuje obiekt WikiArticle SQLAlchemy na słownik."""
+    if not article: return {}
+    data = {
+        'id': article.id, 'name': article.title, 'title': article.title,
+        'description': article.content.get('description') if article.content else None,
+        'abstract': article.content.get('abstract') if article.content else None,
+        'image_url': article.image_url, 'url': article.source_url,
+        'source_url': article.source_url, 'is_canon': True,
+        'info_box': article.content or {}
+    }
+    if article.content:
+        structured_data = {}
+        if article.content.get('Region'): structured_data['region'] = article.content['Region']
+        if article.content.get('System'): structured_data['system'] = article.content['System']
+        if article.content.get('capital'): structured_data['capital'] = article.content['capital']
+        if article.content.get('Capital'): structured_data['capital'] = article.content['Capital']
+        if structured_data: data['structured'] = structured_data
+    return data
 
 
 class CanonValidator:
     """
-    Validates content against wiki cache.
-    
-    NO hardcoded lists - everything from Wookieepedia!
-    
-    UPDATED: Uses new FANDOM API-based WikiScraper.
+    Waliduje treść, odpytując bezpośrednio bazę danych PostgreSQL.
+    Koniec z ładowaniem wszystkiego do pamięci RAM.
     """
     
     def __init__(self, universe: str = 'star_wars'):
         self.universe = universe
-        self.cache = WikiContentCache()
-        self.scraper = WikiScraper()
         
-        # Lazy-loaded sets (filled on first use)
-        self._canon_species: Optional[Set[str]] = None
-        self._canon_planets: Optional[Set[str]] = None
-        self._canon_organizations: Optional[Set[str]] = None
+        # ✅ NOWA LOGIKA: Dostęp do bazy danych
+        try:
+            self.db = SessionLocal()
+            self.pg_cache = PostgresCacheService(self.db)
+            logger.info(f"✅ CanonValidator połączony z PostgresCacheService dla {universe}")
+        except Exception as e:
+            logger.error(f"❌ CanonValidator nie mógł połączyć się z DB: {e}")
+            self.db = None
+            self.pg_cache = None
         
-        # Full categorized data (lazy loaded)
-        self._categorized_data: Optional[Dict[str, List[str]]] = None
-    
-    def _load_categorized_data(self) -> Dict[str, List[str]]:
-        """
-        Load all categorized canon data from wiki.
+        # ⛔️ USUNIĘTE: Wszystkie stare, leniwie ładowane zestawy (_canon_species, _categorized_data itp.)
+
+    def __del__(self):
+        """Zamknij sesję bazy danych, gdy walidator jest niszczony"""
+        if self.db:
+            self.db.close()
+
+    def _get_paginated_category(self, category: str, limit: Optional[int] = None, query: Optional[str] = None) -> List[str]:
+        """Pobiera paginowane dane kategorii z PostgreSQL"""
+        if not self.pg_cache:
+            logger.error("Brak pg_cache. Nie można pobrać danych.")
+            return []
         
-        This is the main data source - fetched once and cached.
-        
-        Returns:
-            Dict: category -> list of article titles
-        """
-        if self._categorized_data is None:
-            logger.info(f"📡 Loading canon data for {self.universe}...")
-            
-            try:
-                # Use new WikiScraper (FANDOM API based)
-                self._categorized_data = self.scraper.get_canon_categorized_data(
-                    universe=self.universe,
-                    depth=3,
-                    limit=60000,
-                    force_refresh=False,  # Use cache if available
-                    prefetch_images=False  # Don't need images here
-                )
-                
-                total = sum(len(items) for items in self._categorized_data.values())
-                logger.info(f"✅ Loaded {total:,} canon articles")
-                
-            except Exception as e:
-                logger.error(f"❌ Failed to load canon data: {e}")
-                # Fallback to empty dict
-                self._categorized_data = {}
-        
-        return self._categorized_data
-    
-    def _load_canon_species(self) -> Set[str]:
-        """Load all canon species from wiki categories"""
-        if self._canon_species is None:
-            logger.debug(f"Loading canon species for {self.universe}...")
-            
-            try:
-                categorized = self._load_categorized_data()
-                species_list = categorized.get('species', [])
-                self._canon_species = set(species_list)
-                
-                logger.info(f"✅ Loaded {len(self._canon_species):,} canon species")
-                
-            except Exception as e:
-                logger.error(f"⚠️ Failed to load species: {e}")
-                # Fallback to minimal safe list
-                self._canon_species = {'Human', 'Twi\'lek', 'Rodian', 'Wookiee'}
-        
-        return self._canon_species
-    
-    def _load_canon_planets(self) -> Set[str]:
-        """Load all canon planets from wiki categories"""
-        if self._canon_planets is None:
-            logger.debug(f"Loading canon planets for {self.universe}...")
-            
-            try:
-                categorized = self._load_categorized_data()
-                planets_list = categorized.get('planets', [])
-                self._canon_planets = set(planets_list)
-                
-                logger.info(f"✅ Loaded {len(self._canon_planets):,} canon planets")
-                
-            except Exception as e:
-                logger.error(f"⚠️ Failed to load planets: {e}")
-                # Fallback
-                self._canon_planets = {'Tatooine', 'Coruscant', 'Naboo', 'Endor'}
-        
-        return self._canon_planets
-    
-    def _load_canon_organizations(self) -> Set[str]:
-        """Load all canon organizations from wiki categories"""
-        if self._canon_organizations is None:
-            logger.debug(f"Loading canon organizations for {self.universe}...")
-            
-            try:
-                categorized = self._load_categorized_data()
-                orgs_list = categorized.get('organizations', [])
-                self._canon_organizations = set(orgs_list)
-                
-                logger.info(f"✅ Loaded {len(self._canon_organizations):,} canon organizations")
-                
-            except Exception as e:
-                logger.error(f"⚠️ Failed to load organizations: {e}")
-                # Fallback
-                self._canon_organizations = {'Jedi Order', 'Sith', 'Galactic Empire'}
-        
-        return self._canon_organizations
-    
+        try:
+            results = self.pg_cache.search_articles_paginated(
+                universe=self.universe,
+                category=category,
+                query=query,
+                limit=limit or 1000, # Domyślny limit, jeśli nie podano
+                offset=0
+            )
+            return [article.title for article in results['items']]
+        except Exception as e:
+            logger.error(f"Nie udało się pobrać kategorii {category} z PostgreSQL: {e}")
+            return []
+
     def get_canon_species(self, limit: int = None) -> List[str]:
-        """
-        Get list of canon species (optionally limited).
-        
-        Args:
-            limit: Max number to return
-            
-        Returns:
-            Sorted list of species names
-        """
-        species = self._load_canon_species()
-        species_list = sorted(list(species))
-        return species_list[:limit] if limit else species_list
+        """Pobiera listę gatunków z PostgreSQL"""
+        return self._get_paginated_category('species', limit)
     
     def get_canon_planets(self, limit: int = None) -> List[str]:
-        """
-        Get list of canon planets (optionally limited).
-        
-        Args:
-            limit: Max number to return
-            
-        Returns:
-            Sorted list of planet names
-        """
-        planets = self._load_canon_planets()
-        planets_list = sorted(list(planets))
-        return planets_list[:limit] if limit else planets_list
+        """Pobiera listę planet z PostgreSQL"""
+        return self._get_paginated_category('planets', limit)
     
     def get_canon_organizations(self, limit: int = None) -> List[str]:
-        """
-        Get list of canon organizations (optionally limited).
-        
-        Args:
-            limit: Max number to return
-            
-        Returns:
-            Sorted list of organization names
-        """
-        orgs = self._load_canon_organizations()
-        orgs_list = sorted(list(orgs))
-        return orgs_list[:limit] if limit else orgs_list
+        """Pobiera listę organizacji z PostgreSQL"""
+        return self._get_paginated_category('organizations', limit)
     
     def get_canon_category(self, category: str, limit: int = None) -> List[str]:
-        """
-        Get list of canon items for any category.
-        
-        Args:
-            category: Category name (e.g., 'weapons', 'vehicles')
-            limit: Max number to return
-            
-        Returns:
-            Sorted list of item names
-        """
-        try:
-            categorized = self._load_categorized_data()
-            items = categorized.get(category, [])
-            items_list = sorted(items)
-            return items_list[:limit] if limit else items_list
-        except Exception as e:
-            logger.error(f"Failed to get category {category}: {e}")
-            return []
+        """Pobiera listę elementów dla dowolnej kategorii z PostgreSQL"""
+        return self._get_paginated_category(category, limit)
     
-    def validate_species(self, species: str) -> bool:
-        """
-        Check if species exists in wiki.
+    def _check_entity_exists(self, entity: str, category: str) -> bool:
+        """Sprawdza, czy encja istnieje w danej kategorii w PostgreSQL"""
+        if not entity or not self.pg_cache:
+            return True # Zawsze zakładaj, że jest poprawna, jeśli nie ma encji lub bazy
         
-        Args:
-            species: Species name to validate
-            
-        Returns:
-            True if species is canon
-        """
-        if not species:
-            return True
-        canon_species = self._load_canon_species()
-        return species in canon_species
+        try:
+            # Użyj szybkiego wyszukiwania po tytule
+            article = self.pg_cache.get_article_by_title(entity, self.universe)
+            # Jeśli znaleziono i kategoria pasuje
+            if article and article.category == category:
+                return True
+            # Jeśli znaleziono, ale kategoria nie pasuje (np. "Luke" to 'character', a nie 'planet')
+            elif article:
+                return False
+            # Jeśli nie znaleziono po tytule (może być literówka lub AI coś wymyśliło)
+            return False
+        except Exception as e:
+            logger.error(f"Błąd walidacji encji {entity}: {e}")
+            return True # W razie błędu lepiej przepuścić
+
+    def validate_species(self, species: str) -> bool:
+        """Sprawdza, czy gatunek istnieje w bazie"""
+        return self._check_entity_exists(species, 'species')
     
     def validate_planet(self, planet: str) -> bool:
-        """
-        Check if planet exists in wiki.
-        
-        Args:
-            planet: Planet name to validate
-            
-        Returns:
-            True if planet is canon
-        """
-        if not planet:
-            return True
-        canon_planets = self._load_canon_planets()
-        return planet in canon_planets
+        """Sprawdza, czy planeta istnieje w bazie"""
+        return self._check_entity_exists(planet, 'planets')
     
     def validate_organization(self, org: str) -> bool:
-        """
-        Check if organization exists in wiki.
-        
-        Args:
-            org: Organization name to validate
-            
-        Returns:
-            True if organization is canon
-        """
-        if not org:
-            return True
-        canon_orgs = self._load_canon_organizations()
-        return org in canon_orgs
+        """Sprawdza, czy organizacja istnieje w bazie"""
+        return self._check_entity_exists(org, 'organizations')
     
     def get_wiki_article(self, entity: str) -> Optional[Dict]:
-        """
-        Get cached wiki article for entity.
+        """Pobiera artykuł z PostgreSQL"""
+        if not self.pg_cache:
+            return None
         
-        Args:
-            entity: Entity name
-            
-        Returns:
-            Article dict or None
-        """
-        return self.cache.get_article(entity, self.universe)
+        article = self.pg_cache.get_article_by_title(entity, self.universe)
+        return article_to_dict(article)
     
     def search_similar_canon(
         self, 
         term: str, 
         category: str = 'species'
     ) -> List[str]:
-        """
-        Search for similar canon terms.
-        
-        Useful when AI invents something close to real.
-        e.g., "Gorvothian" → suggests "Geonosian", "Corellian"
-        
-        Args:
-            term: Term to search for
-            category: Category to search in
-            
-        Returns:
-            List of similar canon terms
-        """
-        term_lower = term.lower()
-        
-        if category == 'species':
-            canon_set = self._load_canon_species()
-        elif category == 'planet':
-            canon_set = self._load_canon_planets()
-        elif category == 'organization':
-            canon_set = self._load_canon_organizations()
-        else:
+        """Wyszukuje podobne terminy kanoniczne w PostgreSQL"""
+        if not self.pg_cache:
             return []
-        
-        # Simple similarity: starts with same letters
-        similar = [
-            item for item in canon_set 
-            if item.lower().startswith(term_lower[:3])
-        ]
-        
-        return similar[:5]  # Top 5 matches
+            
+        try:
+            results = self.pg_cache.search_articles_paginated(
+                universe=self.universe,
+                category=category,
+                query=term, # Użyj wyszukiwania ILIKE
+                limit=5
+            )
+            return [article.title for article in results['items']]
+        except Exception as e:
+            logger.error(f"Błąd search_similar_canon dla {term}: {e}")
+            return []
     
     def scan_and_validate(self, text: str) -> Dict[str, List[str]]:
         """
-        Scan text for entities and validate against wiki.
-        
-        Returns dict with valid/invalid entities.
-        
-        Args:
-            text: Text to scan
-            
-        Returns:
-            Dict with categorized entities
+        Skanuje tekst w poszukiwaniu encji i waliduje je w bazie.
+        (Ta funkcja jest teraz znacznie wolniejsza, ponieważ wykonuje wiele zapytań do bazy, 
+        ale nie zużywa RAM-u)
         """
         import re
         
-        # Extract proper nouns
         proper_nouns = set(re.findall(r'\b[A-Z][a-z]+(?:\'[a-z]+)?\b', text))
+        cleaned_nouns = set(re.sub(r"'s$", '', noun) for noun in proper_nouns)
         
-        # Remove possessives (apostrophe-s) before checking
-        cleaned_nouns = set()
-        for noun in proper_nouns:
-            # Remove 's from possessives (e.g., "Aldhani's" → "Aldhani")
-            cleaned = re.sub(r"'s$", '', noun)
-            cleaned_nouns.add(cleaned)
-        
-        proper_nouns = cleaned_nouns
-        
-        # MASSIVELY EXPANDED skip list
         skip_words = {
-            # Articles, pronouns, demonstratives
-            'The', 'A', 'An', 'This', 'That', 'These', 'Those',
-            'You', 'Your', 'He', 'She', 'It', 'We', 'They', 'Them',
-            'His', 'Her', 'Their', 'My', 'Our', 'Me', 'Him',
-            
-            # Question words
+            'The', 'A', 'An', 'This', 'That', 'You', 'Your', 'He', 'She', 'It', 'We', 'They',
             'What', 'Where', 'When', 'Why', 'How', 'Who', 'Which',
-            
-            # Common verbs (capitalized at start of sentence)
-            'As', 'Is', 'Are', 'Was', 'Were', 'Be', 'Been', 'Being',
-            'Have', 'Has', 'Had', 'Do', 'Does', 'Did',
-            'Will', 'Would', 'Could', 'Should', 'May', 'Might',
-            'Can', 'Must', 'Shall',
-            
-            # Discourse markers
-            'Meanwhile', 'However', 'Therefore', 'Thus', 'Hence',
-            'Welcome', 'Indeed', 'Perhaps', 'Maybe', 'Actually',
-            'Currently', 'Recently', 'Previously', 'Eventually',
-            
-            # Generic fantasy/sci-fi terms (NOT proper nouns)
+            'As', 'Is', 'Are', 'Was', 'Were', 'Be', 'Been', 'Being', 'Have', 'Has', 'Had',
+            'Will', 'Would', 'Could', 'Should', 'May', 'Might', 'Can', 'Must',
+            'Meanwhile', 'However', 'Therefore', 'Welcome', 'Indeed', 'Perhaps', 'Maybe',
             'Force', 'Temple', 'District', 'City', 'Planet', 'System',
             'Republic', 'Empire', 'Alliance', 'Order', 'Council',
             'Master', 'Knight', 'Lord', 'Captain', 'Commander',
-            'Jedi', 'Sith',  # These are organizations
-            'Spice', 'Credits', 'Ship', 'Vessel', 'Station',
+            'Jedi', 'Sith', 'Spice', 'Credits', 'Ship', 'Vessel', 'Station',
             'Market', 'Cantina', 'Port', 'Bay', 'Sector',
-            
-            # Numbers and quantifiers
-            'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven',
-            'First', 'Second', 'Third', 'Fourth', 'Fifth',
-            'Many', 'Few', 'Some', 'All', 'None', 'Several', 'Both',
-            
-            # Directions and locations (generic)
+            'One', 'Two', 'Three', 'First', 'Second', 'Third',
             'North', 'South', 'East', 'West', 'Above', 'Below',
             'Here', 'There', 'Nearby', 'Far', 'Near', 'Around',
-            'Outside', 'Inside', 'Beyond',
-            
-            # Time words
             'Today', 'Tomorrow', 'Yesterday', 'Now', 'Then',
-            'Before', 'After', 'During', 'While', 'Until',
             'Night', 'Day', 'Morning', 'Evening', 'Dawn', 'Dusk',
-            
-            # Meta/debug words
             'Turn', 'Beat', 'Act', 'Session', 'Campaign',
             'Data', 'Status', 'State', 'World', 'Context',
-            
-            # Polish words (if any slip through)
             'Narrator', 'Player', 'Miejsce', 'Godzina', 'Data',
-            
-            # Common adjectives
-            'Large', 'Small', 'Great', 'Grand', 'Old', 'New',
-            'Ancient', 'Modern', 'Dark', 'Light', 'Deep', 'High',
-            'Long', 'Short', 'Wide', 'Narrow', 'Thick', 'Thin',
         }
-        proper_nouns -= skip_words
+        proper_nouns = cleaned_nouns - skip_words
         
         validated = {
             'valid_species': [],
@@ -374,102 +203,67 @@ class CanonValidator:
             'unknown': []
         }
         
+        if not self.pg_cache:
+            logger.warning("Brak pg_cache, walidacja pominięta.")
+            validated['unknown'] = list(proper_nouns)
+            return validated
+            
+        # Sprawdzanie każdej encji w bazie danych
         for noun in proper_nouns:
-            # Check all categories
-            if self.validate_species(noun):
-                validated['valid_species'].append(noun)
-            elif self.validate_planet(noun):
-                validated['valid_planets'].append(noun)
-            elif self.validate_organization(noun):
-                validated['valid_organizations'].append(noun)
-            else:
-                # Additional checks before marking as invalid
-                
-                # 1. Is it a likely NPC name? (short, simple)
-                if len(noun) <= 7 and noun[0].isupper() and noun[1:].islower():
-                    # Check if it doesn't have sci-fi suffixes
-                    suspicious_endings = ('ian', 'ite', 'ese', 'ish', 'oid', 'an')
-                    if not any(noun.lower().endswith(end) for end in suspicious_endings):
-                        # Likely NPC name like "Kael", "Zara", "Thek"
-                        validated['unknown'].append(noun)
-                        continue
-                
-                # 2. Check if it's in cache at all
-                article = self.get_wiki_article(noun)
+            try:
+                article = self.pg_cache.get_article_by_title(noun, self.universe)
                 if article:
-                    validated['unknown'].append(noun)  # Exists but unknown category
-                else:
-                    # 3. Only mark as INVALID if it's complex/suspicious
-                    if len(noun) > 7 or any(noun.lower().endswith(end) for end in ('ian', 'ite', 'ese', 'ish', 'oid', 'an')):
-                        validated['invalid'].append(noun)
+                    category = article.category
+                    if category == 'species':
+                        validated['valid_species'].append(noun)
+                    elif category == 'planets':
+                        validated['valid_planets'].append(noun)
+                    elif category == 'organizations':
+                        validated['valid_organizations'].append(noun)
                     else:
-                        # Short unknown word - probably fine
-                        validated['unknown'].append(noun)
+                        validated['unknown'].append(noun) # Znaleziono, ale to inna kategoria
+                else:
+                    # Nie znaleziono
+                    if len(noun) > 7 or any(noun.lower().endswith(end) for end in ('ian', 'ite', 'ese', 'ish', 'oid', 'an')):
+                        validated['invalid'].append(noun) # Prawdopodobnie wymyślone
+                    else:
+                        validated['unknown'].append(noun) # Prawdopodobnie nazwa własna (NPC)
+            except Exception as e:
+                logger.error(f"Błąd walidacji {noun}: {e}")
+                validated['unknown'].append(noun)
         
         return validated
     
     def get_fallback_species(self) -> str:
-        """
-        Get safe fallback species.
-        
-        Returns:
-            Safe species name
-        """
-        common = ['Human', 'Twi\'lek', 'Rodian', 'Zabrak']
-        import random
-        species_set = self._load_canon_species()
-        available = [s for s in common if s in species_set]
-        return random.choice(available) if available else 'Human'
+        """Get safe fallback species."""
+        return 'Human' # Uproszczono - Human jest zawsze bezpieczny
     
     def get_fallback_planet(self) -> str:
-        """
-        Get safe fallback planet.
-        
-        Returns:
-            Safe planet name
-        """
-        common = ['Tatooine', 'Coruscant', 'Naboo', 'Corellia']
-        import random
-        planets_set = self._load_canon_planets()
-        available = [p for p in common if p in planets_set]
-        return random.choice(available) if available else 'Tatooine'
+        """Get safe fallback planet."""
+        return 'Tatooine' # Uproszczono - Tatooine jest zawsze bezpieczna
     
     def get_all_categories(self) -> List[str]:
-        """
-        Get list of all available categories.
-        
-        Returns:
-            List of category names
-        """
+        """Pobiera listę wszystkich kategorii z bazy"""
+        if not self.pg_cache:
+            return []
         try:
-            categorized = self._load_categorized_data()
-            return list(categorized.keys())
+            counts = self.pg_cache.get_category_counts(self.universe)
+            return list(counts.keys())
         except Exception as e:
-            logger.error(f"Failed to get categories: {e}")
+            logger.error(f"Nie udało się pobrać kategorii: {e}")
             return []
     
     def get_stats(self) -> Dict:
-        """
-        Get validator statistics.
-        
-        Returns:
-            Dict with stats
-        """
+        """Pobiera statystyki bezpośrednio z bazy"""
+        if not self.pg_cache:
+            return {'error': 'No pg_cache connection'}
         try:
-            categorized = self._load_categorized_data()
-            
+            stats = self.pg_cache.get_cache_stats(self.universe)
             return {
                 'universe': self.universe,
-                'total_categories': len(categorized),
-                'total_articles': sum(len(items) for items in categorized.values()),
-                'categories': {
-                    cat: len(items)
-                    for cat, items in categorized.items()
-                },
-                'species_loaded': len(self._canon_species) if self._canon_species else 0,
-                'planets_loaded': len(self._canon_planets) if self._canon_planets else 0,
-                'organizations_loaded': len(self._canon_organizations) if self._canon_organizations else 0,
+                'total_articles': stats.get('total_articles', 0),
+                'categories': stats.get('categories', {}),
             }
         except Exception as e:
-            logger.error(f"Failed to get stats: {e}")
+            logger.error(f"Nie udało się pobrać statystyk: {e}")
             return {'error': str(e)}

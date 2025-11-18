@@ -9,7 +9,7 @@ Only players (not GM) have inventory.
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
-
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, JSON # ✅ Dodano JSON
 # ✅ Upewnij się, że importujesz MultiplayerCampaign, jeśli jest potrzebny do relationship
 from app.models.database import Base
 from app.models.campaign import MultiplayerCampaign 
@@ -42,6 +42,8 @@ class PlayerInventory(Base):
     
     # Quantity and metadata
     quantity = Column(Integer, default=1, nullable=False)
+    # Przechowuje np. {"strength": 2, "dexterity": -1, "ac": 5}
+    stat_modifiers = Column(JSON, default={}, nullable=True)
     added_by_gm_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     added_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     notes = Column(String(500), nullable=True)  # GM can add notes

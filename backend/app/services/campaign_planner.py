@@ -1,26 +1,46 @@
 # backend/app/services/campaign_planner.py
 """
 AI generuje strukturę kampanii na początku sesji
-Używa wiki context dla inspiracji
+Używa wiki context z PostgreSQL dla inspiracji
 """
 from typing import Dict, List
 import json
 import re
+import logging
 from app.services.campaign_structure import (
     CampaignArc, StoryBeat, StoryAct, BeatType
 )
-from app.services.wiki_fetcher_service import WikiFetcherService
+# ⛔️ USUNIĘTE: from app.services.wiki_fetcher_service import WikiFetcherService
 from app.core.ai.adaptive_game_master import AdaptiveGameMaster
+
+# ✅ NOWE IMPORTY
+from app.models.database import SessionLocal
+from app.services.postgres_cache_service import PostgresCacheService
+
+logger = logging.getLogger(__name__)
 
 class CampaignPlanner:
     """
-    Planuje całą kampanię używając AI + wiki knowledge
+    Planuje całą kampanię używając AI + wiki knowledge z PostgreSQL
     """
     
     def __init__(self, game_master: AdaptiveGameMaster):
         self.gm = game_master
-        self.wiki_fetcher = WikiFetcherService()
+        
+        # ✅ NOWA LOGIKA: Dostęp do bazy danych PostgreSQL
+        try:
+            self.db = SessionLocal()
+            self.pg_cache = PostgresCacheService(self.db)
+            logger.info("✅ CampaignPlanner połączony z PostgresCacheService")
+        except Exception as e:
+            logger.error(f"❌ CampaignPlanner nie mógł połączyć się z DB: {e}")
+            self.db = None
+            self.pg_cache = None
     
+    def __del__(self):
+        if self.db:
+            self.db.close()
+            
     def generate_campaign(
         self, 
         character: Dict, 
@@ -29,30 +49,17 @@ class CampaignPlanner:
     ) -> CampaignArc:
         """
         Generuje pełną strukturę kampanii
-        
-        Args:
-            character: Character data
-            universe: star_wars, lotr, etc.
-            desired_length: short (15-20), medium (30-40), long (50-70) turns
         """
         
-        print(f"📖 Planning {desired_length} campaign for {character['name']}...")
+        logger.info(f"📖 Planning {desired_length} campaign for {character['name']}...")
         
-        # 1. Get campaign parameters
         params = self._get_campaign_parameters(desired_length)
-        
-        # 2. Gather wiki context
         wiki_context = self._gather_wiki_inspiration(character, universe)
-        
-        # 3. Generate outline with AI
         campaign_outline = self._generate_outline_with_ai(
             character, universe, params, wiki_context
         )
-        
-        # 4. Create story beats
         beats = self._create_story_beats(campaign_outline, params)
         
-        # 5. Build CampaignArc
         arc = CampaignArc(
             campaign_id=f"camp_{character['id']}_{universe}",
             title=campaign_outline['title'],
@@ -65,7 +72,6 @@ class CampaignPlanner:
             current_beat_id=beats[0].id if beats else None
         )
         
-        # Set first beat as active
         if beats:
             beats[0].status = "active"
         
@@ -74,43 +80,47 @@ class CampaignPlanner:
     def _get_campaign_parameters(self, length: str) -> Dict:
         """Parametry dla różnych długości"""
         params = {
-            'short': {
-                'total_turns': 18,
-                'num_beats': 12
-            },
-            'medium': {
-                'total_turns': 35,
-                'num_beats': 18
-            },
-            'long': {
-                'total_turns': 60,
-                'num_beats': 25
-            }
+            'short': {'total_turns': 18, 'num_beats': 12},
+            'medium': {'total_turns': 35, 'num_beats': 18},
+            'long': {'total_turns': 60, 'num_beats': 25}
         }
         return params.get(length, params['medium'])
     
     def _gather_wiki_inspiration(self, character: Dict, universe: str) -> str:
-        """Zbiera wiki articles dla inspiracji AI"""
+        """✅ ZMODYFIKOWANE: Zbiera wiki articles dla inspiracji AI z PostgreSQL"""
         
+        if not self.pg_cache:
+            return "Brak połączenia z bazą danych Wiki."
+            
         elements = []
         
-        # Race info
-        if character.get('race'):
-            race_article = self.wiki_fetcher.fetch_article(character['race'], universe)
-            if race_article:
-                elements.append(f"Race ({character['race']}): {race_article.get('description', '')[:200]}")
-        
-        # Homeworld info
-        if character.get('homeworld'):
-            planet = self.wiki_fetcher.fetch_article(character['homeworld'], universe)
-            if planet:
-                elements.append(f"Homeworld ({character['homeworld']}): {planet.get('description', '')[:200]}")
-        
-        # Get organizations for antagonist ideas
-        from app.core.scraper.wiki_scraper import WikiScraper
-        scraper = WikiScraper()
-        orgs = scraper.get_all_organizations(universe)[:10]
-        elements.append(f"Possible antagonists: {', '.join(orgs[:5])}")
+        try:
+            # Race info
+            if character.get('race'):
+                article = self.pg_cache.get_article_by_title(character['race'], universe)
+                if article and article.content:
+                    elements.append(f"Race ({character['race']}): {article.content.get('description', '')[:200]}")
+            
+            # Homeworld info
+            if character.get('homeworld'):
+                article = self.pg_cache.get_article_by_title(character['homeworld'], universe)
+                if article and article.content:
+                    elements.append(f"Homeworld ({character['homeworld']}): {article.content.get('description', '')[:200]}")
+            
+            # Get organizations for antagonist ideas
+            results = self.pg_cache.search_articles_paginated(
+                universe=universe,
+                category="organizations",
+                limit=10,
+                offset=0
+            )
+            orgs = [a.title for a in results['items']]
+            if orgs:
+                elements.append(f"Possible antagonists (Organizations): {', '.join(orgs[:5])}")
+                
+        except Exception as e:
+            logger.error(f"Nie udało się zebrać inspiracji z Wiki: {e}")
+            return "Błąd podczas pobierania danych kanonu."
         
         return "\n".join(elements) if elements else "No wiki context available"
     
@@ -131,7 +141,7 @@ CHARACTER:
 - Class: {character.get('class_type', 'Adventurer')}
 - Level: {character.get('level', 1)}
 
-WIKI CONTEXT (use for canon elements):
+WIKI CONTEXT (use for canon elements, especially antagonists):
 {wiki_context}
 
 CAMPAIGN:
@@ -141,14 +151,14 @@ CAMPAIGN:
 Create campaign outline with:
 1. title: Engaging campaign name
 2. theme: One word (revenge/discovery/redemption/survival)
-3. antagonist: Main villain (from wiki orgs if possible)
+3. antagonist: Main villain (from wiki context if possible)
 4. goal: What player must accomplish
 5. hook: Act 1 inciting incident
 6. twist: Act 2 midpoint surprise
 7. climax: Act 3 final confrontation
 
 RULES:
-- Use ONLY canon wiki elements
+- Use ONLY canon wiki elements from the context provided
 - Make it personal to character
 - Keep antagonist credible
 - Ensure logical progression
@@ -164,15 +174,14 @@ Return ONLY valid JSON:
     "climax": "..."
 }}"""
         
-        response = self.gm._generate_llm_response(prompt, "")
+        response = self.gm._generate_llm_response(prompt, universe)
         
-        # Try to parse JSON
         try:
             json_match = re.search(r'\{.*\}', response, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group())
         except Exception as e:
-            print(f"⚠️ AI JSON parse failed: {e}")
+            logger.warning(f"AI JSON parse failed: {e}. Response was: {response}")
         
         # Fallback
         return {
@@ -187,16 +196,14 @@ Return ONLY valid JSON:
     
     def _create_story_beats(self, outline: Dict, params: Dict) -> List[StoryBeat]:
         """Tworzy konkretne story beats"""
-        
         beats = []
         beat_id = 0
         total_turns = params['total_turns']
         
-        # Calculate act lengths (simplified)
-        act1_turns = int(total_turns * 0.22)  # 22%
-        act2_turns = int(total_turns * 0.50)  # 50%
-        act3_turns = int(total_turns * 0.22)  # 22%
-        epilogue_turns = total_turns - act1_turns - act2_turns - act3_turns  # Remaining
+        act1_turns = int(total_turns * 0.22)
+        act2_turns = int(total_turns * 0.50)
+        act3_turns = int(total_turns * 0.22)
+        epilogue_turns = total_turns - act1_turns - act2_turns - act3_turns
         
         # ACT 1: Setup
         act1_beats = [

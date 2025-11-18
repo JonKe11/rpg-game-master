@@ -1,11 +1,11 @@
 # backend/app/api/v1/endpoints/multiplayer.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict
 from datetime import datetime
 from pydantic import BaseModel
 from sqlalchemy.orm.attributes import flag_modified
-
+import random
 from app.core.dependencies import get_db, get_current_user
 from app.models.user import User
 from app.models.campaign import MultiplayerCampaign, CampaignStatus, ParticipantRole
@@ -28,10 +28,13 @@ class JoinCampaignRequest(BaseModel):
 
 class SendMessageRequest(BaseModel):
     message_type: str
-    content: str
+    content: str = ""
     character_id: int = None
     metadata: Dict = {}
-
+    dice_type: int = None
+    dice_count: int = 1
+    modifier: int = 0
+    
 # ============================================================================
 # CAMPAIGN MANAGEMENT
 # ============================================================================
@@ -42,7 +45,7 @@ async def create_campaign(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Create new multiplayer campaign (lobby)"""
+    """Tworzy nową kampanię (lobby)"""
     
     campaign = MultiplayerCampaign(
         title=request.title,
@@ -69,25 +72,28 @@ async def list_campaigns(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """List available campaigns"""
+    """Zwraca listę kampanii, do których użytkownik ma dostęp"""
     
     campaigns = db.query(MultiplayerCampaign).filter(
         (MultiplayerCampaign.is_public == True) | 
-        (MultiplayerCampaign.creator_id == current_user.id)
+        (MultiplayerCampaign.creator_id == current_user.id) # Zawsze pokazuj prywatne kampanie twórcy
     ).filter(
         MultiplayerCampaign.status.in_([CampaignStatus.LOBBY, CampaignStatus.ACTIVE, CampaignStatus.PAUSED])
     ).all()
     
+    # ✅ ZMIANA: Zwracamy listę ID uczestników, aby frontend wiedział, czy gracz może dołączyć
     return [
         {
             "id": c.id,
             "title": c.title,
             "universe": c.universe,
             "status": c.status.value,
-            "player_count": len(c.participants),
+            "player_count": len(c.participants or []),
             "max_players": c.max_players,
             "has_gm": c.game_master_id is not None,
-            "created_at": c.created_at.isoformat()
+            "created_at": c.created_at.isoformat(),
+            "participant_ids": [p.get("user_id") for p in (c.participants or [])], # ✅ NOWE POLE
+            "creator_id": c.creator_id
         }
         for c in campaigns
     ]
@@ -98,7 +104,7 @@ async def get_campaign(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get campaign details"""
+    """Pobiera szczegóły kampanii"""
     
     campaign = db.query(MultiplayerCampaign).filter(
         MultiplayerCampaign.id == campaign_id
@@ -114,7 +120,7 @@ async def get_campaign(
         "status": campaign.status.value,
         "creator_id": campaign.creator_id,
         "game_master_id": campaign.game_master_id,
-        "participants": campaign.participants,
+        "participants": campaign.participants or [], # Zawsze zwracaj listę
         "current_location": campaign.current_location,
         "location_image_url": campaign.location_image_url,
         "max_players": campaign.max_players,
@@ -128,7 +134,7 @@ async def join_campaign(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Join campaign lobby"""
+    """✅ ZMODYFIKOWANA LOGIKA: Dołącz do lobby lub wznów sesję"""
     
     campaign = db.query(MultiplayerCampaign).filter(
         MultiplayerCampaign.id == campaign_id
@@ -137,43 +143,62 @@ async def join_campaign(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     
-    if campaign.status != CampaignStatus.LOBBY:
-        raise HTTPException(status_code=400, detail="Campaign already started")
-    
-    if len(campaign.participants) >= campaign.max_players:
-        raise HTTPException(status_code=400, detail="Campaign is full")
-    
-    # Check if already joined - if yes, just return success
-    if any(p["user_id"] == current_user.id for p in campaign.participants):
-        return {"message": "Already in campaign"}
-    
-    # Add participant
-    campaign.participants.append({
-        "user_id": current_user.id,
-        "username": current_user.username,
-        "character_id": request.character_id,
-        "role": ParticipantRole.PLAYER.value,
-        "ready": False,
-        "joined_at": datetime.now().isoformat()
-    })
-    
-    flag_modified(campaign, "participants")
-    
+    participants = campaign.participants or []
+    participant = next((p for p in participants if p.get("user_id") == current_user.id), None)
+
+    # Scenariusz 1: Dołączanie do LOBBY
+    if campaign.status == CampaignStatus.LOBBY:
+        if participant:
+            print(f"User {current_user.username} is already in lobby.")
+            return {"message": "Already in lobby", "status": "joined"}
+        
+        if len(participants) >= campaign.max_players:
+            raise HTTPException(status_code=400, detail="Campaign is full")
+        
+        # Dodaj nowego uczestnika
+        participants.append({
+            "user_id": current_user.id,
+            "username": current_user.username,
+            "character_id": request.character_id,
+            "role": ParticipantRole.PLAYER.value,
+            "ready": False,
+            "joined_at": datetime.now().isoformat()
+        })
+        campaign.participants = participants
+        flag_modified(campaign, "participants")
+        
+        print(f"✅ User {current_user.username} joined lobby {campaign_id}")
+
+        await manager.broadcast(campaign_id, {
+            "type": "system",
+            "content": f"{current_user.username} joined the lobby"
+        })
+
+    # Scenariusz 2: Wznawianie sesji ACTIVE lub PAUSED
+    elif campaign.status in [CampaignStatus.ACTIVE, CampaignStatus.PAUSED]:
+        if not participant:
+            raise HTTPException(status_code=403, detail="Campaign is in progress and you are not a participant")
+        
+        # Sprawdź, czy postać się zgadza
+        if participant.get("character_id") != request.character_id:
+            raise HTTPException(status_code=403, detail="You must join with the same character you started with")
+        
+        print(f"✅ User {current_user.username} rejoined session {campaign_id}")
+        
+        # Jeśli sesja była PAUSED, a dołącza GM, przenieś ją do LOBBY (wznawianie)
+        if campaign.status == CampaignStatus.PAUSED and campaign.game_master_id == current_user.id:
+            campaign.status = CampaignStatus.LOBBY
+            await manager.broadcast(campaign_id, {
+                "type": "system",
+                "content": "The Game Master has returned. Session is resuming in lobby..."
+            })
+
     db.commit()
     db.refresh(campaign)
     
-    print(f"✅ User {current_user.username} joined campaign {campaign_id}")
-    print(f"   Participants count: {len(campaign.participants)}")
-    
-    # Notify via WebSocket
-    await manager.broadcast(campaign_id, {
-        "type": "system",
-        "content": f"{current_user.username} joined the campaign"
-    })
-    
     return {
         "message": "Joined successfully",
-        "participants_count": len(campaign.participants)
+        "status": campaign.status.value
     }
 
 @router.post("/campaigns/{campaign_id}/toggle-ready")
@@ -182,52 +207,20 @@ async def toggle_ready(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Toggle ready status for current player"""
+    campaign = db.query(MultiplayerCampaign).filter(MultiplayerCampaign.id == campaign_id).first()
+    if not campaign: raise HTTPException(404, "Campaign not found")
+    if campaign.status != CampaignStatus.LOBBY: raise HTTPException(400, "Campaign already started")
     
-    campaign = db.query(MultiplayerCampaign).filter(
-        MultiplayerCampaign.id == campaign_id
-    ).first()
+    participant = next((p for p in (campaign.participants or []) if p["user_id"] == current_user.id), None)
+    if not participant: raise HTTPException(404, "Not in campaign")
+    if participant.get("role") == ParticipantRole.GAME_MASTER.value: raise HTTPException(403, "Game Master is always ready")
     
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-    
-    if campaign.status != CampaignStatus.LOBBY:
-        raise HTTPException(status_code=400, detail="Campaign already started")
-    
-    # Find participant
-    participant = next((p for p in campaign.participants if p["user_id"] == current_user.id), None)
-    if not participant:
-        raise HTTPException(status_code=404, detail="Not in campaign")
-    
-    # ✅ DODANE: GM nie może toggle ready
-    if participant.get("role") == ParticipantRole.GAME_MASTER.value:
-        raise HTTPException(status_code=403, detail="Game Master is always ready")
-    
-    # Toggle ready
     participant["ready"] = not participant.get("ready", False)
-    
     flag_modified(campaign, "participants")
     db.commit()
-    db.refresh(campaign)
     
-    # Check if all non-GM players ready
-    players = [p for p in campaign.participants if p.get("role") != ParticipantRole.GAME_MASTER.value]
-    all_ready = all(p.get("ready", False) for p in players) if players else False
-    
-    print(f"✅ User {current_user.username} ready status: {participant['ready']}")
-    print(f"   All players ready: {all_ready}")
-    
-    # Broadcast via WebSocket
-    status_text = "ready" if participant["ready"] else "not ready"
-    await manager.broadcast(campaign_id, {
-        "type": "system",
-        "content": f"{current_user.username} is {status_text}"
-    })
-    
-    return {
-        "ready": participant["ready"],
-        "all_ready": all_ready
-    }
+    await manager.broadcast(campaign_id, {"type": "system", "content": f"{current_user.username} is {'ready' if participant['ready'] else 'not ready'}"})
+    return {"ready": participant["ready"]}
 
 @router.post("/campaigns/{campaign_id}/assign-gm")
 async def assign_game_master(
@@ -236,41 +229,21 @@ async def assign_game_master(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Assign Game Master role (only creator can do this)"""
+    campaign = db.query(MultiplayerCampaign).filter(MultiplayerCampaign.id == campaign_id).first()
+    if not campaign: raise HTTPException(404, "Campaign not found")
+    if campaign.creator_id != current_user.id: raise HTTPException(403, "Only creator can assign GM")
+    if campaign.status != CampaignStatus.LOBBY: raise HTTPException(400, "Can only assign GM in lobby")
     
-    campaign = db.query(MultiplayerCampaign).filter(
-        MultiplayerCampaign.id == campaign_id
-    ).first()
-    
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-    
-    if campaign.creator_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only creator can assign GM")
-    
-    if campaign.status != CampaignStatus.LOBBY:
-        raise HTTPException(status_code=400, detail="Can only assign GM in lobby")
-    
-    participant = next((p for p in campaign.participants if p["user_id"] == user_id), None)
-    if not participant:
-        raise HTTPException(status_code=404, detail="User not in campaign")
+    participant = next((p for p in (campaign.participants or []) if p["user_id"] == user_id), None)
+    if not participant: raise HTTPException(404, "User not in campaign")
     
     campaign.game_master_id = user_id
     participant["role"] = ParticipantRole.GAME_MASTER.value
-    participant["ready"] = True  # ✅ GM jest zawsze ready
-    
+    participant["ready"] = True
     flag_modified(campaign, "participants")
-    
     db.commit()
-    db.refresh(campaign)
     
-    print(f"✅ {participant['username']} assigned as GM (auto-ready)")
-    
-    await manager.broadcast(campaign_id, {
-        "type": "system",
-        "content": f"{participant['username']} is now the Game Master"
-    })
-    
+    await manager.broadcast(campaign_id, {"type": "system", "content": f"{participant['username']} is now the Game Master"})
     return {"message": "GM assigned"}
 
 @router.post("/campaigns/{campaign_id}/start")
@@ -279,47 +252,60 @@ async def start_campaign(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Start campaign (only GM can start)"""
+    """✅ ZMODYFIKOWANA LOGIKA: Startuje z LOBBY lub PAUSED"""
+    campaign = db.query(MultiplayerCampaign).filter(MultiplayerCampaign.id == campaign_id).first()
+    if not campaign: raise HTTPException(404, "Campaign not found")
+    if campaign.game_master_id != current_user.id: raise HTTPException(403, "Only GM can start campaign")
     
-    campaign = db.query(MultiplayerCampaign).filter(
-        MultiplayerCampaign.id == campaign_id
-    ).first()
+    # ✅ ZEZWÓL NA START Z LOBBY LUB PAUSED
+    if campaign.status not in [CampaignStatus.LOBBY, CampaignStatus.PAUSED]:
+        raise HTTPException(status_code=400, detail=f"Campaign already {campaign.status.value}")
     
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+    if not campaign.game_master_id: raise HTTPException(400, "No GM assigned")
     
-    if campaign.game_master_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only GM can start campaign")
+    players = [p for p in (campaign.participants or []) if p.get("role") != ParticipantRole.GAME_MASTER.value]
     
-    if campaign.status != CampaignStatus.LOBBY:
-        raise HTTPException(status_code=400, detail="Campaign already started")
-    
-    if not campaign.game_master_id:
-        raise HTTPException(status_code=400, detail="No GM assigned")
-    
-    # ✅ Check if all non-GM players are ready
-    if campaign.participants:
-        players = [p for p in campaign.participants if p.get("role") != ParticipantRole.GAME_MASTER.value]
-        if players:
-            all_ready = all(p.get("ready", False) for p in players)
-            if not all_ready:
-                not_ready = [p["username"] for p in players if not p.get("ready", False)]
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Not all players ready. Waiting for: {', '.join(not_ready)}"
-                )
+    # ✅ Sprawdź "gotowość" tylko jeśli startujemy z LOBBY
+    if campaign.status == CampaignStatus.LOBBY:
+        if not players: raise HTTPException(400, "Need at least one player to start")
+        all_ready = all(p.get("ready", False) for p in players)
+        if not all_ready:
+            not_ready = [p["username"] for p in players if not p.get("ready", False)]
+            raise HTTPException(400, f"Waiting for: {', '.join(not_ready)}")
     
     campaign.status = CampaignStatus.ACTIVE
     campaign.started_at = datetime.now()
-    
     db.commit()
     
+    await manager.broadcast(campaign_id, {"type": "system", "content": "Campaign has started! 🎲"})
+    return {"message": "Campaign started"}
+
+# ✅ NOWY ENDPOINT: Pauzowanie sesji przez GM
+@router.post("/campaigns/{campaign_id}/pause")
+async def pause_campaign(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Pauzuje sesję (tylko GM)"""
+    campaign = db.query(MultiplayerCampaign).filter(MultiplayerCampaign.id == campaign_id).first()
+    if not campaign: raise HTTPException(404, "Campaign not found")
+    if campaign.game_master_id != current_user.id: raise HTTPException(403, "Only GM can pause campaign")
+    
+    campaign.status = CampaignStatus.PAUSED
+    campaign.last_activity = datetime.now()
+    db.commit()
+    
+    # Poinformuj wszystkich i wyrzuć ich z sesji
     await manager.broadcast(campaign_id, {
-        "type": "system",
-        "content": "Campaign has started! 🎲"
+        "type": "session_paused",
+        "content": "The Game Master has paused the session. Returning to lobby..."
     })
     
-    return {"message": "Campaign started"}
+    return {"message": "Campaign paused"}
+
+# (Reszta plików: messages, location, delete - bez zmian)
+# ... (Wklej tutaj resztę swojego pliku multiplayer.py od linii 281)
 
 # ============================================================================
 # MESSAGES
@@ -386,15 +372,42 @@ async def send_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Send message to campaign"""
+    """Send message to campaign (handles dice rolls too)"""
     
+    final_content = request.content
+    final_metadata = request.metadata or {}
+    final_type = MessageType(request.message_type)
+
+    # ✅ LOGIKA RZUTU KOŚCIĄ
+    if request.message_type == "dice_roll":
+        if not request.dice_type:
+            raise HTTPException(status_code=400, detail="Dice type required")
+            
+        rolls = [random.randint(1, request.dice_type) for _ in range(request.dice_count)]
+        total = sum(rolls) + request.modifier
+        
+        # Zmień typ na wynik, żeby frontend wiedział jak to wyświetlić
+        final_type = MessageType.DICE_ROLL_RESULT
+        
+        # Sformatuj wiadomość
+        roll_str = ", ".join(map(str, rolls))
+        mod_str = f"+{request.modifier}" if request.modifier > 0 else (str(request.modifier) if request.modifier < 0 else "")
+        final_content = f"rolled {request.dice_count}d{request.dice_type}{mod_str}: [{roll_str}] = {total}"
+        
+        final_metadata = {
+            "rolls": rolls,
+            "total": total,
+            "modifier": request.modifier,
+            "dice_type": request.dice_type
+        }
+
     message = CampaignMessage(
         campaign_id=campaign_id,
         user_id=current_user.id,
         character_id=request.character_id,
-        message_type=MessageType(request.message_type),
-        content=request.content,
-        message_metadata=request.metadata
+        message_type=final_type,
+        content=final_content,
+        message_metadata=final_metadata
     )
     
     db.add(message)
@@ -402,12 +415,12 @@ async def send_message(
     db.refresh(message)
     
     await manager.broadcast(campaign_id, {
-        "type": request.message_type,
-        "content": request.content,
+        "type": message.message_type.value, # ✅ Używamy obliczonego typu z bazy
+        "content": message.content,         # ✅ Używamy obliczonej treści (wynik rzutu)
         "user_id": current_user.id,
         "username": current_user.username,
         "character_id": request.character_id,
-        "message_metadata": request.metadata,
+        "message_metadata": message.message_metadata, # ✅ Używamy metadanych z bazy
         "timestamp": message.timestamp.isoformat()
     })
     

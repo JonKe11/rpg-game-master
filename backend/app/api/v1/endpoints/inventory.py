@@ -233,7 +233,8 @@ async def add_item_to_player(
         item_description=request.item_description,
         quantity=request.quantity,
         added_by_gm_id=current_user.id,
-        notes=request.notes
+        notes=request.notes,
+        stat_modifiers=request.stat_modifiers or {}
     )
     
     db.add(new_item)

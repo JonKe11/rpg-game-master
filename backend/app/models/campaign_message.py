@@ -23,6 +23,9 @@ class MessageType(enum.Enum):
     LOCATION_CHANGE = "location_change"  # ✨ NOWE!
     ITEM_ADDED = "item_added"            # ✨ NOWE!
 
+
+    NPC_SPAWN = "npc_spawn"
+    DICE_ROLL_RESULT = "dice_roll_result" # Wynik rzutu (systemowy)
 class CampaignMessage(Base):
     __tablename__ = "campaign_messages"
     

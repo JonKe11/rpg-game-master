@@ -1,12 +1,20 @@
 # backend/app/services/game_master_service.py
-from typing import Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING # ✅ Dodano TYPE_CHECKING
 from datetime import datetime
-from app.core.ai.adaptive_game_master import AdaptiveGameMaster
+# ⛔️ USUNIĘTO: from app.core.ai.adaptive_game_master import AdaptiveGameMaster
 from app.services.session_storage import SessionStorage
 from app.core.exceptions import AIError
+import logging # ✅ Dodano logger
+
+# ✅ NOWY BLOK: Importuj tylko dla type-checkera, aby przerwać cykl
+if TYPE_CHECKING:
+    from app.core.ai.adaptive_game_master import AdaptiveGameMaster
+
+logger = logging.getLogger(__name__)
 
 class GameMasterService:
-    def __init__(self, game_master: AdaptiveGameMaster, storage):
+    # ✅ POPRAWKA: Użyj stringa ("") dla type hinta, aby uniknąć importu w czasie działania
+    def __init__(self, game_master: "AdaptiveGameMaster", storage):
         self.game_master = game_master
         # Akceptuj różne typy storage
         if isinstance(storage, dict):
@@ -32,14 +40,19 @@ class GameMasterService:
             
             # Zapisz kontekst
             if hasattr(self.storage, 'save_context'):
-                from app.schemas.game_session import SessionContext
-                ctx = SessionContext(**context)
-                self.storage.save_context(session_id, ctx)
+                # Sprawdź, czy SessionContext istnieje przed importem
+                try:
+                    from app.schemas.game_session import SessionContext
+                    ctx = SessionContext(**context)
+                    self.storage.save_context(session_id, ctx)
+                except ImportError:
+                    logger.warning("SessionContext schema not found, saving raw dict.")
+                    self.storage.save_context(session_id, context)
             
             return intro_response
             
         except Exception as e:
-            print(f"AI Error: {e}")
+            logger.error(f"AI Error in start_session: {e}", exc_info=True)
             # Fallback response
             return {
                 'message': f"Witaj, {character_data.get('name', 'bohaterze')}! Rozpoczynasz swoją przygodę w świecie {universe}. Rozglądasz się dookoła...",
@@ -56,9 +69,12 @@ class GameMasterService:
                 context = self.storage.get_context(session_id)
             
             if context:
-                response = self.game_master.process_action(action, context.dict())
+                # Jeśli context jest obiektem Pydantic, użyj .dict()
+                context_dict = context.dict() if hasattr(context, 'dict') else context
+                response = self.game_master.process_action(action, context_dict)
             else:
                 # Fallback bez kontekstu
+                logger.warning(f"No context found for session_id: {session_id}. Using fallback response.")
                 response = {
                     'message': f"Wykonujesz akcję: {action}",
                     'type': 'event',
@@ -68,7 +84,7 @@ class GameMasterService:
             return response
             
         except Exception as e:
-            print(f"Process action error: {e}")
+            logger.error(f"Process action error: {e}", exc_info=True)
             return {
                 'message': f"Akcja wykonana: {action}",
                 'type': 'event',

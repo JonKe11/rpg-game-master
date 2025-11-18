@@ -1,24 +1,44 @@
 # backend/app/services/character_service.py
 from typing import List, Optional, Dict
+import logging
 from app.repositories.character_repository import CharacterRepository
 from app.models.character import Character
-from app.services.wiki_fetcher_service import WikiFetcherService
+# ⛔️ USUNIĘTO: from app.services.wiki_fetcher_service import WikiFetcherService
 from app.core.exceptions import NotFoundError, ValidationError
+
+# ✅ NOWE IMPORTY:
+from app.models.database import SessionLocal
+from app.services.postgres_cache_service import PostgresCacheService
+
+logger = logging.getLogger(__name__)
 
 class CharacterService:
     """Service handling character operations"""
     
     def __init__(self, character_repository: CharacterRepository):
         self.char_repo = character_repository
-        self.wiki_fetcher = WikiFetcherService()  # ✅ NOWY: Wiki Fetcher
+        
+        # ✅ NOWA LOGIKA: Bezpośredni dostęp do bazy danych PostgreSQL
+        # Tworzymy osobną sesję, aby uniknąć problemów z zależnościami
+        try:
+            self.db = SessionLocal()
+            self.pg_cache = PostgresCacheService(self.db)
+            logger.info("✅ CharacterService połączony z PostgresCacheService")
+        except Exception as e:
+            logger.error(f"❌ CharacterService nie mógł połączyć się z DB: {e}")
+            self.db = None
+            self.pg_cache = None
+
+    def __del__(self):
+        """Zamknij sesję bazy danych, gdy serwis jest niszczony"""
+        if self.db:
+            self.db.close()
     
     def create_character(self, owner_id: int, **character_data) -> Character:
         """Create new character for user"""
-        # Validate level
         if character_data.get('level', 1) < 1:
             raise ValidationError("Level must be at least 1")
         
-        # Create character
         character = self.char_repo.create(
             owner_id=owner_id,
             **character_data
@@ -42,51 +62,45 @@ class CharacterService:
         """
         Enhance character with data from wiki.
         
-        ✅ UPDATED: Uses new WikiFetcherService with FANDOM API.
-        
-        Args:
-            character_id: Character ID
-            user_id: User ID (for ownership check)
-            
-        Returns:
-            Updated character
+        ✅ ZAKTUALIZOWANE: Używa PostgresCacheService
         """
         character = self.get_character_if_owner(character_id, user_id)
         
+        if not self.pg_cache:
+            logger.warning(f"⚠️ Nie można wzbogacić {character.name}: brak połączenia z pg_cache")
+            return character
+
         try:
-            # Fetch from wiki using new API
-            wiki_data = self.wiki_fetcher.fetch_article(
+            # ✅ NOWA LOGIKA: Pobierz artykuł z bazy PostgreSQL
+            article = self.pg_cache.get_article_by_title(
                 character.name,
                 character.universe
             )
             
-            if wiki_data:
-                # Update character with wiki data
+            if article and article.content:
                 updates = {}
                 
-                # Description (if empty)
-                if wiki_data.get('description') and not character.description:
-                    # Limit to reasonable length
-                    description = wiki_data['description'][:500]
-                    updates['description'] = description
+                # Użyj 'description' z bazy danych (które jest 'abstract' z Wiki)
+                wiki_description = article.content.get('description')
                 
-                # Backstory (use description as backstory if empty)
-                if wiki_data.get('description') and not character.backstory:
-                    backstory = wiki_data['description'][:2000]
-                    updates['backstory'] = backstory
+                if wiki_description:
+                    if not character.description:
+                        updates['description'] = wiki_description[:500]
+                    if not character.backstory:
+                        updates['backstory'] = wiki_description[:2000]
                 
-                # Apply updates
+                # Zastosuj aktualizacje
                 if updates:
                     character = self.char_repo.update(character_id, **updates)
-                    print(f"✅ Enhanced {character.name} with wiki data")
+                    logger.info(f"✅ Wzbogacono {character.name} o dane z Wiki")
                 else:
-                    print(f"ℹ️ {character.name} already has complete data")
+                    logger.info(f"ℹ️ {character.name} posiada już kompletne dane")
             else:
-                print(f"⚠️ No wiki data found for {character.name}")
+                logger.warning(f"⚠️ Nie znaleziono danych Wiki dla {character.name}")
         
         except Exception as e:
-            print(f"⚠️ Wiki enhancement failed for {character.name}: {e}")
-            # Don't raise - enhancement is optional
+            logger.error(f"⚠️ Błąd wzbogacania Wiki dla {character.name}: {e}")
+            # Nie przerywaj - wzbogacanie jest opcjonalne
         
         return character
     
@@ -99,7 +113,6 @@ class CharacterService:
         """Update character if user is owner"""
         character = self.get_character_if_owner(character_id, user_id)
         
-        # Remove None values
         updates = {k: v for k, v in updates.items() if v is not None}
         
         if updates:

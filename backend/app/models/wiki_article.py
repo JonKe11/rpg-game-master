@@ -13,6 +13,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Index, 
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from datetime import datetime, timedelta
+from typing import Dict # ✅ DODANO IMPORT
 
 from app.models.database import Base
 
@@ -22,24 +23,6 @@ class WikiArticle(Base):
     Cached wiki article with JSONB content.
     
     Replaces file-based JSON cache with queryable database.
-    
-    Features:
-    - Fast queries with indexes (universe + category)
-    - JSONB content (flexible + queryable!)
-    - Automatic expiry (TTL)
-    - Access tracking (statistics)
-    
-    Example:
-        article = WikiArticle(
-            title="Tatooine",
-            universe="star_wars",
-            category="planets",
-            content={
-                'description': 'Desert planet...',
-                'climate': 'Arid',
-                'population': 200000
-            }
-        )
     """
     __tablename__ = "wiki_articles"
     
@@ -52,7 +35,6 @@ class WikiArticle(Base):
     category = Column(String(50), nullable=False, index=True)
     
     # Content (JSONB = PostgreSQL superpower!)
-    # Can query inside JSON: content->>'climate' = 'Arid'
     content = Column(JSONB, nullable=True, default={})
     
     # Images (metadata only, files on filesystem!)
@@ -73,19 +55,10 @@ class WikiArticle(Base):
     
     # Composite indexes for fast queries
     __table_args__ = (
-        # Most common query: universe + category
         Index('idx_universe_category', 'universe', 'category'),
-        
-        # Search by title
         Index('idx_title_universe', 'title', 'universe'),
-        
-        # Expire cleanup
         Index('idx_expires_at', 'expires_at'),
-        
-        # Image status
         Index('idx_image_cached', 'image_cached'),
-        
-        # Unique constraint
         Index('idx_unique_article', 'title', 'universe', unique=True),
     )
     
@@ -104,22 +77,6 @@ class WikiArticle(Base):
 class ImageCache(Base):
     """
     Image cache metadata.
-    
-    Tracks downloaded images (binary files stored on filesystem).
-    
-    Features:
-    - URL → local path mapping
-    - Size tracking
-    - Access statistics
-    - Validation status
-    
-    Example:
-        image = ImageCache(
-            url="https://fandom.com/image.png",
-            url_hash="abc123...",
-            local_path="./image_cache/abc123.img",
-            size_bytes=51200
-        )
     """
     __tablename__ = "image_cache"
     
@@ -165,22 +122,6 @@ class ImageCache(Base):
 class ScrapingLog(Base):
     """
     Audit log for scraping operations.
-    
-    Tracks:
-    - When scraping happened
-    - How long it took
-    - How many articles processed
-    - Errors
-    
-    Example:
-        log = ScrapingLog(
-            universe="star_wars",
-            operation_type="categorize_articles",
-            status="running"
-        )
-        # ... do work ...
-        log.status = "completed"
-        log.articles_processed = 52986
     """
     __tablename__ = "scraping_logs"
     
@@ -197,14 +138,14 @@ class ScrapingLog(Base):
     images_downloaded = Column(Integer, default=0)
     images_cached = Column(Integer, default=0)
     images_failed = Column(Integer, default=0)
-    errors_count = Column(Integer, default=0)
+    errors_count = Column(Integer, default=0) # Zmieniono z errors
     
     # Performance
     duration_seconds = Column(Integer, nullable=True)
     
     # Status
     status = Column(String(20), nullable=False, index=True)  # running, completed, failed
-    error_message = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True) # Zmieniono z errors
     
     # Metadata
     extra_metadata = Column(JSONB, nullable=True, default={})
@@ -236,20 +177,6 @@ class ScrapingLog(Base):
 class CategoryCache(Base):
     """
     Pre-computed category statistics.
-    
-    Materialized view for fast counts.
-    
-    Features:
-    - Article counts per category
-    - Last update timestamp
-    - Universe-specific
-    
-    Example:
-        cache = CategoryCache(
-            universe="star_wars",
-            category="planets",
-            article_count=2195
-        )
     """
     __tablename__ = "category_cache"
     
@@ -276,3 +203,40 @@ class CategoryCache(Base):
     
     def __repr__(self):
         return f"<CategoryCache(universe='{self.universe}', category='{self.category}', count={self.article_count})>"
+
+# ============================================
+# ✅ NOWA FUNKCJA POMOCNICZA
+# ============================================
+
+def article_to_dict(article: WikiArticle) -> Dict:
+    """Konwertuje obiekt WikiArticle SQLAlchemy na słownik dla AI."""
+    if not article:
+        return {}
+    
+    data = {
+        'id': article.id,
+        'name': article.title,
+        'title': article.title,
+        'description': article.content.get('description') if article.content else None,
+        'abstract': article.content.get('abstract') if article.content else None,
+        'image_url': article.image_url,
+        'url': article.source_url,
+        'source_url': article.source_url,
+        'is_canon': True,
+        'info_box': article.content or {} # Przekaż cały content jako info_box
+    }
+    
+    # Dodaj 'structured' jeśli istnieje (dla lokacji)
+    structured_data = {}
+    if article.content:
+        # Używamy kluczy parsowanych przez startup_prefetch_service
+        if article.content.get('Region'): structured_data['region'] = article.content['Region']
+        if article.content.get('System'): structured_data['system'] = article.content['System']
+        # Stolica może być w content, ale nie jest parsowana automatycznie - AI może ją znaleźć w info_box
+        if article.content.get('capital'): structured_data['capital'] = article.content['capital']
+        if article.content.get('Capital'): structured_data['capital'] = article.content['Capital']
+            
+    if structured_data:
+        data['structured'] = structured_data
+        
+    return data

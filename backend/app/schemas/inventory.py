@@ -7,6 +7,7 @@ Pydantic models for player inventory validation and serialization.
 
 from pydantic import BaseModel, Field
 from typing import Optional
+from typing import Optional, Dict # ✅ Dodaj Dict
 from datetime import datetime
 
 
@@ -18,7 +19,7 @@ class InventoryItemBase(BaseModel):
     item_description: Optional[str] = Field(None, max_length=1000)
     quantity: int = Field(default=1, ge=1, le=999)
     notes: Optional[str] = Field(None, max_length=500)
-
+    stat_modifiers: Optional[Dict[str, int]] = Field(default_factory=dict)
 
 class InventoryItemCreate(InventoryItemBase):
     """Schema for creating new inventory item"""
@@ -76,3 +77,4 @@ class AddItemToPlayerRequest(BaseModel):
     item_description: Optional[str] = Field(None, max_length=1000)
     quantity: int = Field(default=1, ge=1, le=999)
     notes: Optional[str] = None
+    stat_modifiers: Optional[Dict[str, int]] = Field(default_factory=dict)
