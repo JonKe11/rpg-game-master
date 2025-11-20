@@ -1,239 +1,186 @@
 // frontend/src/components/multiplayer/ItemBrowser.js
+// ✅ WERSJA 4.0 - Używa /wiki/search, wyszukiwania na żywo i paginacji "load more"
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/axiosConfig';
-import { wikiCache } from '../../utils/wikiCache';
+import useDebounce from '../../hooks/useDebounce'; // ✅ Używamy hooka
 
 function ItemBrowser({ 
     onItemSelect, 
     universe = 'star_wars',
-    isGM = false
+    isGM = false,
+    initialCategory = 'weapons',
+    allowedCategories = null
 }) {
-    const [category, setCategory] = useState('weapons');
+    const [category, setCategory] = useState(initialCategory);
     const [items, setItems] = useState([]);
-    const [search, setSearch] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const debouncedSearch = useDebounce(searchQuery, 400); // Opóźnienie wyszukiwania
+    
     const [loading, setLoading] = useState(false);
-    const [categoryCounts, setCategoryCounts] = useState({});
     const [withImages, setWithImages] = useState(true);
+    
+    // Paginacja
+    const [offset, setOffset] = useState(0);
+    const [total, setTotal] = useState(0);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const loaderRef = useRef(null); // Do "infinite scroll"
+
+    const ALL_CATEGORIES = ['weapons', 'armor', 'items', 'vehicles', 'droids', 'characters', 'species', 'creatures'];
+    const categoriesToShow = allowedCategories || ALL_CATEGORIES;
 
     const getProxiedImageUrl = (originalUrl) => {
         if (!originalUrl) return null;
-        
         if (originalUrl.includes('wikia.nocookie.net') || originalUrl.includes('fandom.com')) {
             return `http://localhost:8000/api/v1/wiki/image-proxy?url=${encodeURIComponent(originalUrl)}`;
         }
-        
         return originalUrl;
     };
 
-    const loadCategoryCounts = useCallback(async () => {
+    // ⛔️ Usunięto 'loadCategoryCounts' - niepotrzebne
+    
+    // ✅ Nowa funkcja ładowania danych z paginacją
+    const loadItems = useCallback(async (isNewSearch = false) => {
+        if (isNewSearch) {
+            setLoading(true);
+            setOffset(0); // Resetuj paginację
+        } else {
+            setLoadingMore(true);
+        }
+
         try {
-            const response = await api.get('/wiki/items/all', {
-                params: { universe }
+            const currentOffset = isNewSearch ? 0 : offset;
+            
+            const response = await api.get('/wiki/search', {
+                params: {
+                    universe: universe,
+                    category: category,
+                    q: debouncedSearch || undefined, // Użyj debounced search
+                    limit: 30, // Ładuj po 30
+                    offset: currentOffset,
+                    with_images: withImages
+                }
             });
             
-            const counts = {};
-            Object.entries(response.data.categories).forEach(([cat, data]) => {
-                counts[cat] = data.count;
-            });
+            const newItems = response.data.items || [];
             
-            setCategoryCounts(counts);
+            if (isNewSearch) {
+                setItems(newItems);
+            } else {
+                // Dodaj tylko te, których jeszcze nie ma (na wszelki wypadek)
+                setItems(prevItems => [
+                    ...prevItems, 
+                    ...newItems.filter(newItem => !prevItems.some(prev => prev.name === newItem.name))
+                ]);
+            }
+            
+            setTotal(response.data.total || 0);
+            setOffset(currentOffset + newItems.length);
+            
         } catch (error) {
-            console.error('Error loading category counts:', error);
-        }
-    }, [universe]);
-
-//     
-
-// W pliku ItemBrowser.js
-
-const loadItems = useCallback(async () => {
-    setLoading(true);
-    try {
-        const cacheKey = `items_${category}_${withImages}_${search}`;
-        const cached = wikiCache.get(universe, cacheKey);
-        
-        if (cached) {
-            setItems(cached);
+            console.error('Error loading items:', error);
+        } finally {
             setLoading(false);
-            return;
+            setLoadingMore(false);
         }
-        
-        // ✅ Dynamiczne budowanie URL i parametrów
-        const endpoint = withImages 
-            ? `/wiki/items/category/${category}/with-images`
-            : `/wiki/items/category/${category}`;
+    }, [category, debouncedSearch, universe, withImages, offset]); // Zależność od debouncedSearch
 
-        const params = {
-            universe: universe,
-            limit: 50,
-            search: search || undefined,
-        };
-
-        const response = await api.get(endpoint, { params });
-        
-        // ✅ MAPOWANIE: Backend używa klucza 'items'
-        const itemsData = response.data.items || [];
-        setItems(itemsData);
-        
-        wikiCache.set(universe, cacheKey, itemsData);
-        
-    } catch (error) {
-        console.error('Error loading items:', error);
-    } finally {
-        setLoading(false);
-    }
-}, [category, search, universe, withImages]);
-
+    // Uruchom ponownie wyszukiwanie, gdy zmieni się kategoria, query (debounced) lub filtr obrazków
     useEffect(() => {
-        loadCategoryCounts();
-    }, [loadCategoryCounts]);
+        loadItems(true); // 'true' oznacza nowy wyszukiwanie (resetuje listę)
+    }, [category, debouncedSearch, withImages, universe]); // Usunięto 'loadItems'
 
+    // Obsługa "infinite scroll"
     useEffect(() => {
-        loadItems();
-    }, [loadItems]);
-
-    if (!isGM) {
-        return (
-            <div className="item-browser bg-gray-800 rounded-lg p-6">
-                <h3 className="text-2xl font-bold text-white mb-4">🎒 Item Browser</h3>
-                <div className="text-center py-12">
-                    <div className="text-6xl mb-4">🔒</div>
-                    <p className="text-gray-400 text-lg">
-                        Only GM can browse and add items
-                    </p>
-                    <p className="text-gray-500 text-sm mt-2">
-                        Your inventory is managed by the Game Master
-                    </p>
-                </div>
-            </div>
+        const observer = new IntersectionObserver(
+            (entries) => {
+                // Załaduj więcej, jeśli widać loader, nie ładujemy już, i mamy jeszcze co ładować
+                if (entries[0].isIntersecting && !loading && !loadingMore && items.length < total) {
+                    loadItems(false); // 'false' oznacza ładowanie więcej
+                }
+            },
+            { threshold: 1.0 }
         );
-    }
+
+        const currentLoader = loaderRef.current;
+        if (currentLoader) {
+            observer.observe(currentLoader);
+        }
+
+        return () => {
+            if (currentLoader) {
+                observer.unobserve(currentLoader);
+            }
+        };
+    }, [loaderRef, loadItems, loading, loadingMore, items, total]);
+
+
+    if (!isGM) return <div className="text-center text-gray-400 p-12">Only GM can browse.</div>;
 
     return (
-        <div className="item-browser bg-gray-800 rounded-lg p-6">
-            <h3 className="text-2xl font-bold text-white mb-6">🎒 Item Browser (GM)</h3>
+        <div className="item-browser bg-gray-800 rounded-lg p-6 border border-gray-700 h-full flex flex-col">
+            <h3 className="text-xl font-bold text-white mb-4">
+                📂 Browser: <span className="text-blue-400 capitalize">{category}</span>
+            </h3>
 
-            <div className="flex gap-2 mb-6 overflow-x-auto">
-                {['weapons', 'armor', 'items', 'vehicles', 'droids'].map((cat) => (
-                    <button
-                        key={cat}
-                        onClick={() => setCategory(cat)}
-                        className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition ${category === cat ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                    >
+            <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-thin">
+                {categoriesToShow.map((cat) => (
+                    <button key={cat} onClick={() => setCategory(cat)} 
+                        className={`px-3 py-1 rounded-full text-sm font-semibold whitespace-nowrap transition ${category === cat ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
                         {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                        {categoryCounts[cat] && (
-                            <span className="ml-2 text-xs opacity-75">
-                                ({categoryCounts[cat]})
-                            </span>
-                        )}
+                        {/* Usunięto liczniki, bo wymagają osobnego API calla */}
                     </button>
                 ))}
             </div>
 
-            <div className="mb-6 space-y-3">
-                <input
-                    type="text"
-                    placeholder={`Search ${category}...`}
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                
-                <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={withImages}
-                        onChange={(e) => setWithImages(e.target.checked)}
-                        className="w-4 h-4"
-                    />
-                    <span className="text-sm">
-                        Show images from wiki (slower but prettier!)
-                    </span>
+            <div className="mb-4 flex gap-2">
+                <input type="text" placeholder={`Search ${category}...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} 
+                    className="flex-1 px-3 py-2 bg-gray-700 text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="flex items-center gap-2 text-gray-300 cursor-pointer bg-gray-700 px-3 rounded hover:bg-gray-600">
+                    <input type="checkbox" checked={withImages} onChange={(e) => setWithImages(e.target.checked)} className="w-4 h-4" />
+                    <span className="text-xs">Images</span>
                 </label>
             </div>
 
-            {loading ? (
-                <div className="text-center py-12">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                    <div className="text-white text-lg">Loading {category}...</div>
-                    {withImages && (
-                        <div className="text-gray-400 text-sm mt-2">
-                            Fetching images from wiki...
-                        </div>
-                    )}
-                </div>
-            ) : items.length === 0 ? (
-                <div className="text-center py-12">
-                    <div className="text-gray-400">No {category} found</div>
-                    {search && (
-                        <button
-                            onClick={() => setSearch('')}
-                            className="mt-4 text-blue-400 hover:text-blue-300"
-                        >
-                            Clear search
-                        </button>
-                    )}
-                </div>
-            ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[500px] overflow-y-auto">
-                    {items.map((item) => {
-                        const itemName = typeof item === 'string' ? item : item.name;
-                        const imageUrl = typeof item === 'object' ? item.image_url : null;
-                        const description = typeof item === 'object' ? item.description : null;
-
-                        const itemObject = {
-                            name: itemName,
-                            image_url: imageUrl,
-                            description: description,
-                            category: category // Dodaj aktualną kategorię!
-                        }
-                        return (
-                            <div
-                                key={itemName}
-                                onClick={() => onItemSelect(itemObject)}
-                                className="bg-gray-700 hover:bg-gray-600 rounded-lg p-4 cursor-pointer transition hover:scale-105"
-                            >
-                                {withImages && imageUrl ? (
-                                    <img
-                                        src={getProxiedImageUrl(imageUrl)}
-                                        alt={itemName}
-                                        className="w-full h-24 object-cover rounded mb-2"
-                                        crossOrigin="anonymous"
-                                        onError={(e) => {
-                                            console.log('❌ Image failed:', itemName);
-                                            e.target.style.display = 'none';
-                                        }}
-                                        onLoad={() => {
-                                            console.log('✅ Image loaded:', itemName);
-                                        }}
-                                    />
-                                ) : withImages ? (
-                                    <div className="w-full h-24 bg-gray-600 rounded mb-2 flex items-center justify-center">
-                                        <span className="text-gray-400 text-3xl">
-                                            {category === 'weapons' ? '⚔️' : category === 'armor' ? '🛡️' : category === 'vehicles' ? '🚀' : category === 'droids' ? '🤖' : '📦'}
-                                        </span>
+            <div className="flex-1 overflow-y-auto pr-1">
+                {loading ? (
+                    <div className="text-center py-12 text-white">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                        Loading...
+                    </div>
+                ) : items.length === 0 ? (
+                    <div className="text-center py-12 text-gray-400">
+                        No results found {searchQuery && `for "${searchQuery}"`} in {category}.
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {items.map((item) => {
+                            const itemObject = { ...item, category: category };
+                            return (
+                                <div key={`${item.name}-${item.id}`} onClick={() => onItemSelect(itemObject)} 
+                                    className="bg-gray-700 hover:bg-gray-600 rounded p-2 cursor-pointer transition hover:scale-105 group">
+                                    {withImages && item.image_url ? (
+                                        <img src={getProxiedImageUrl(item.image_url)} alt={item.name} 
+                                            className="w-full h-24 object-cover rounded mb-2 group-hover:opacity-90" crossOrigin="anonymous" 
+                                            onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling.style.display = 'flex'; }} />
+                                    ) : null}
+                                    <div className="w-full h-24 bg-gray-600 rounded mb-2 items-center justify-center text-2xl" style={{ display: (withImages && item.image_url) ? 'none' : 'flex' }}>
+                                        {category === 'characters' || category === 'species' ? '👤' : category === 'creatures' ? '🐾' : '📦'}
                                     </div>
-                                ) : null}
-                                
-                                <h4 className="text-white font-semibold text-sm">
-                                    {itemName}
-                                </h4>
-                                
-                                {description && (
-                                    <p className="text-gray-300 text-xs mt-1 line-clamp-2">
-                                        {description}
-                                    </p>
-                                )}
-                            </div>
-                        );
-                    })}
+                                    <h4 className="text-white font-semibold text-xs truncate">{item.name}</h4>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+                
+                {/* Loader "Load More" */}
+                <div ref={loaderRef} className="h-10 text-center py-4">
+                    {loadingMore && <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-500 mx-auto"></div>}
+                    {!loading && items.length > 0 && items.length >= total && (
+                        <span className="text-gray-500 text-sm">End of results ({total} items)</span>
+                    )}
                 </div>
-            )}
-
-            <div className="mt-4 text-sm text-gray-400 text-center">
-                Showing {items.length} {category}
-                {search && ` matching "${search}"`}
             </div>
         </div>
     );

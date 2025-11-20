@@ -208,6 +208,16 @@ function PlayerInventoryPanel({
                                     </p>
                                 )}
 
+                                {item.stat_modifiers && Object.keys(item.stat_modifiers).length > 0 && (
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                        {Object.entries(item.stat_modifiers).map(([stat, value]) => (
+                                            <span key={stat} className="bg-gray-900 border border-gray-600 text-xs px-2 py-1 rounded text-blue-300 font-mono">
+                                                {value >= 0 ? '+' : ''}{value} {stat.slice(0,3).toUpperCase()}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+
                                 {item.notes && (
                                     <div className="mt-2 p-2 bg-gray-600 rounded">
                                         <p className="text-yellow-300 text-xs">

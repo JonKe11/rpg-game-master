@@ -1,11 +1,15 @@
 // frontend/src/components/multiplayer/MultiplayerSession.js
+// ✅ WERSJA 4.1 - Logika "End Session" dla GM
 
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../../api/axiosConfig';
 import LocationSelector from './LocationSelector';
-import ItemBrowser from './ItemBrowser';
-import PlayerInventoryPanel from './PlayerInventoryPanel';  // ✅ NOWE
-import GMPlayerManager from './GMPlayerManager';            // ✅ NOWE
+import PlayerInventoryPanel from './PlayerInventoryPanel';
+import GMPlayerManager from './GMPlayerManager';
+import CompendiumBrowser from './CompendiumBrowser';
+import NpcCreator from './NpcCreator';
+import PlayerCharacterSheet from './PlayerCharacterSheet';
+import DiceRoller from './DiceRoller';
 
 function MultiplayerSession({ campaign, character, onEnd }) {
   const [messages, setMessages] = useState([]);
@@ -14,30 +18,30 @@ function MultiplayerSession({ campaign, character, onEnd }) {
   const [connected, setConnected] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [isGM, setIsGM] = useState(false);
-  
   const [currentLocation, setCurrentLocation] = useState('Unknown');
-  const [showLocationSelector, setShowLocationSelector] = useState(false);
-  const [showItemBrowser, setShowItemBrowser] = useState(false);
-  
-  // ✅ NOWE: Inventory & GM Panel
-  const [showInventory, setShowInventory] = useState(false);
-  const [showGMPanel, setShowGMPanel] = useState(false);
+
+  // 'compendium', 'npcCreator', 'gmPlayers', 'inventory'
+  const [middleView, setMiddleView] = useState('compendium'); 
   
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    console.log('🎮 Campaign data received:', campaign);
-    
     const userData = localStorage.getItem('user');
     if (userData) {
       const user = JSON.parse(userData);
-      console.log('👤 Current user:', user);
-      console.log('👤 User ID:', user.id);
-      console.log('👑 GM ID from campaign:', campaign.game_master_id);
-      console.log('🎭 Is GM? (user.id === campaign.game_master_id):', user.id === campaign.game_master_id);
-      
       setCurrentUser(user);
       setIsGM(campaign.game_master_id === user.id);
+      
+      // Ustaw domyślny widok
+      if (campaign.game_master_id === user.id) {
+          setMiddleView('gmPlayers');
+      } else {
+          setMiddleView('inventory');
+      }
+    }
+    // Ustaw lokację początkową
+    if (campaign.current_location) {
+        setCurrentLocation(campaign.current_location);
     }
   }, [campaign, campaign.game_master_id]);
 
@@ -50,33 +54,33 @@ function MultiplayerSession({ campaign, character, onEnd }) {
           content: msg.content,
           username: msg.username || 'System',
           user_id: msg.user_id,
-          timestamp: msg.timestamp
+          timestamp: msg.timestamp,
+          message_metadata: msg.message_metadata // ✅ Ważne dla NPC
         })));
-        console.log('✅ Loaded message history:', response.data.length, 'messages');
       } catch (error) {
         console.error('❌ Failed to load history:', error);
       }
     };
-
     loadHistory();
   }, [campaign.id]);
 
   useEffect(() => {
     if (!campaign.id) return;
-
     const websocket = new WebSocket(`ws://localhost:8000/ws/campaign/${campaign.id}`);
-
-    websocket.onopen = () => {
-      console.log('✅ WebSocket connected to campaign', campaign.id);
-      setConnected(true);
-    };
-
+    websocket.onopen = () => setConnected(true);
     websocket.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      console.log('📨 Received:', data);
+
+      // ✅ MODYFIKACJA: Obsługa pauzy
+      if (data.type === 'session_paused') {
+          alert('The Game Master has paused the session. Returning to campaign list.');
+          onEnd(); // Wyjdź do listy kampanii
+          return; // Nie przetwarzaj dalej
+      }
       
-      if (data.type === 'location_change' && data.metadata?.location) {
-        setCurrentLocation(data.metadata.location);
+      if (data.type === 'location_change') {
+        // Backend broadcastuje 'location' i 'location_image_url'
+        setCurrentLocation(data.location || 'Unknown');
       }
       
       setMessages(prev => [...prev, {
@@ -84,25 +88,16 @@ function MultiplayerSession({ campaign, character, onEnd }) {
         content: data.content,
         username: data.username || 'System',
         user_id: data.user_id,
-        timestamp: data.timestamp || new Date().toISOString()
+        timestamp: data.timestamp || new Date().toISOString(),
+        message_metadata: data.message_metadata // ✅ Ważne dla NPC
       }]);
     };
-
-    websocket.onclose = () => {
-      console.log('❌ WebSocket disconnected');
-      setConnected(false);
-    };
-
-    websocket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-
+    websocket.onclose = () => setConnected(false);
+    websocket.onerror = (error) => console.error('WebSocket error:', error);
     return () => {
-      if (websocket.readyState === WebSocket.OPEN) {
-        websocket.close();
-      }
+      if (websocket.readyState === WebSocket.OPEN) websocket.close();
     };
-  }, [campaign.id]);
+  }, [campaign.id, onEnd]); // ✅ MODYFIKACJA: Dodano onEnd
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -110,66 +105,45 @@ function MultiplayerSession({ campaign, character, onEnd }) {
 
   const handleLocationChange = async (newLocation) => {
     if (!isGM) return;
-    
-    setCurrentLocation(newLocation);
-    
     try {
-      await api.post(`/multiplayer/campaigns/${campaign.id}/messages`, {
-        message_type: 'location_change',
-        content: `📍 GM changed location to: ${newLocation}`,
-        character_id: character.id,
-        metadata: { location: newLocation }
-      });
-      
-      setShowLocationSelector(false);
+      // Używamy dedykowanego endpointu, który istnieje w multiplayer.py
+      await api.post(
+          `/multiplayer/campaigns/${campaign.id}/location`, 
+          null, // Brak body
+          { params: { location_name: newLocation } }
+      );
     } catch (error) {
-      console.error('Failed to change location:', error);
-    }
-  };
-
-  const handleItemSelect = async (item) => {
-    if (!isGM) return;
-    
-    try {
-      await api.post(`/multiplayer/campaigns/${campaign.id}/messages`, {
-        message_type: 'gm_event',
-        content: `🎒 GM added item: ${item.name}`,
-        character_id: character.id,
-        metadata: { item: item.name }
-      });
-    } catch (error) {
-      console.error('Failed to add item:', error);
+        console.error('Failed to change location via /location endpoint:', error);
+        // Fallback (jeśli /location zawiedzie, spróbuj starego)
+        try {
+            await api.post(`/multiplayer/campaigns/${campaign.id}/messages`, {
+                message_type: 'location_change',
+                content: `📍 GM changed location to: ${newLocation}`,
+                character_id: character.id,
+                metadata: { location: newLocation }
+            });
+        } catch (e) {
+            console.error('Failed to change location via /messages:', e);
+        }
     }
   };
 
   const sendMessage = async (e, customType = null) => {
     if (e) e.preventDefault();
-    
     if (!inputMessage.trim() || !currentUser) return;
-
     const finalType = customType || messageType;
-
     try {
       await api.post(`/multiplayer/campaigns/${campaign.id}/messages`, {
         message_type: finalType,
         content: inputMessage,
         character_id: character.id
       });
-
       setInputMessage('');
     } catch (error) {
       console.error('Failed to send message:', error);
-      alert('Failed to send message');
     }
   };
 
-  // ✅ ZACHOWANE z oryginału
-  const handleQuickAction = (text, type = 'player_action') => {
-    setInputMessage(text);
-    setMessageType(type);
-  };
-
-  // ✅ ZACHOWANE z oryginału
   const handleGMAction = (type) => {
     setMessageType(type);
     const placeholders = {
@@ -179,14 +153,75 @@ function MultiplayerSession({ campaign, character, onEnd }) {
     };
     setInputMessage(placeholders[type] || '');
   };
+  
+  const handleQuickAction = (text, type = 'player_action') => {
+    setInputMessage(text);
+    setMessageType(type);
+  };
 
-  // ✅ ZACHOWANE z oryginału - PEŁNE FORMATOWANIE
+  // ✅ NOWA FUNKCJA: GM pauzuje sesję
+  const handleEndSession = async () => {
+      if (!isGM) return;
+      if (!window.confirm('Are you sure you want to end this session? All players will be disconnected and the game will be paused.')) {
+          return;
+      }
+      
+      try {
+          // Wywołaj nowy endpoint pauzy
+          await api.post(`/multiplayer/campaigns/${campaign.id}/pause`);
+          // onEnd() zostanie wywołane automatycznie przez WebSocket (session_paused)
+      } catch (error) {
+          console.error('Failed to pause session:', error);
+          alert('Could not pause session. Please try again.');
+      }
+  };
+
   const renderMessage = (msg, index) => {
     const isSystem = msg.type === 'system';
     const isMyMessage = msg.user_id === currentUser?.id;
     const isGMMessage = msg.type?.startsWith('gm_');
     const isDiceRoll = msg.type === 'dice_roll';
     const isLocationChange = msg.type === 'location_change';
+    const isDiceRollResult = msg.type === 'dice_roll_result';
+    const isNpcSpawn = msg.type === 'npc_spawn';
+
+    if (isDiceRollResult) {
+        return (
+            <div key={index} className="bg-purple-900 rounded-lg p-3 border-l-4 border-purple-500 max-w-md mx-auto my-2">
+                <div className="text-purple-300 text-xs mb-1 text-center font-bold">
+                    🎲 {msg.username} rolled dice
+                </div>
+                <div className="text-white text-center text-lg font-mono">{msg.content}</div>
+            </div>
+        );
+    }
+
+    if (isNpcSpawn) {
+        const npc = msg.message_metadata?.npc;
+        return (
+            <div key={index} className="bg-gray-800 border border-gray-600 rounded-lg p-4 max-w-md mx-auto my-2">
+                <div className="flex gap-4">
+                    {npc?.image_url && (
+                        <img src={npc.image_url} className="w-20 h-20 object-cover rounded bg-gray-900" alt="NPC" />
+                    )}
+                    <div className="flex-1">
+                        <h4 className="text-white font-bold text-lg">{npc?.name || 'Unknown NPC'}</h4>
+                        <p className="text-gray-400 text-sm mb-2">{npc?.race}</p>
+                        {npc?.stats && (
+                            <div className="grid grid-cols-3 gap-1 text-center">
+                                {Object.entries(npc.stats).map(([k,v]) => (
+                                    <div key={k} className="bg-gray-700 rounded px-1 py-0.5">
+                                        <span className="text-[10px] text-gray-400 block uppercase">{k.slice(0,3)}</span>
+                                        <span className="text-xs text-white font-bold">{v}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (isLocationChange) {
       return (
@@ -213,7 +248,6 @@ function MultiplayerSession({ campaign, character, onEnd }) {
         </div>
       );
     }
-
     if (isDiceRoll) {
       return (
         <div key={index} className="bg-green-900 rounded-lg p-3 border-l-4 border-green-500 max-w-md mx-auto">
@@ -224,7 +258,6 @@ function MultiplayerSession({ campaign, character, onEnd }) {
         </div>
       );
     }
-
     if (isSystem) {
       return (
         <div key={index} className="bg-gray-700 rounded-lg p-3 text-center max-w-md mx-auto">
@@ -232,7 +265,6 @@ function MultiplayerSession({ campaign, character, onEnd }) {
         </div>
       );
     }
-
     return (
       <div 
         key={index} 
@@ -247,14 +279,69 @@ function MultiplayerSession({ campaign, character, onEnd }) {
       </div>
     );
   };
+  
+  const renderPanelButtons = () => {
+    if (isGM) {
+      return (
+        <>
+          <button onClick={() => setMiddleView('gmPlayers')} className={`px-4 py-2 rounded-lg font-semibold transition ${middleView === 'gmPlayers' ? 'bg-purple-600' : 'bg-gray-700 hover:bg-gray-600'}`}>👑 Players</button>
+          <button onClick={() => setMiddleView('npcCreator')} className={`px-4 py-2 rounded-lg font-semibold transition ${middleView === 'npcCreator' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}`}>👤 Create NPC</button>
+          <button onClick={() => setMiddleView('compendium')} className={`px-4 py-2 rounded-lg font-semibold transition ${middleView === 'compendium' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}`}>📚 Compendium</button>
+        </>
+      );
+    } else {
+      return (
+        <>
+          <button onClick={() => setMiddleView('inventory')} className={`px-4 py-2 rounded-lg font-semibold transition ${middleView === 'inventory' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}`}>🎒 Inventory</button>
+          <button onClick={() => setMiddleView('compendium')} className={`px-4 py-2 rounded-lg font-semibold transition ${middleView === 'compendium' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}`}>📚 Compendium</button>
+        </>
+      );
+    }
+  };
+
+  const renderMiddlePanel = () => {
+    if (isGM) {
+      switch (middleView) {
+        case 'gmPlayers': return <GMPlayerManager campaign={campaign} isGM={isGM} universe={campaign.universe} />;
+        case 'npcCreator': return <NpcCreator campaignId={campaign.id} universe={campaign.universe} />;
+        case 'compendium': return <CompendiumBrowser universe={campaign.universe} />;
+        default: return <GMPlayerManager campaign={campaign} isGM={isGM} universe={campaign.universe} />;
+      }
+    } else {
+      switch (middleView) {
+        case 'inventory': return <PlayerInventoryPanel campaignId={campaign.id} userId={currentUser.id} isGM={false} />;
+        case 'compendium': return <CompendiumBrowser universe={campaign.universe} />;
+        default: return <PlayerInventoryPanel campaignId={campaign.id} userId={currentUser.id} isGM={false} />;
+      }
+    }
+  };
+  
+  const renderRightPanel = () => {
+    if (isGM) {
+      return (
+        <LocationSelector
+          universe={campaign.universe}
+          onLocationChange={handleLocationChange}
+          currentLocation={currentLocation}
+          isGM={isGM}
+        />
+      );
+    } else {
+      return (
+        <PlayerCharacterSheet 
+            campaignId={campaign.id}
+            userId={currentUser.id}
+            characterName={character.name}
+        />
+      );
+    }
+  };
 
   return (
-    <div className="fixed inset-0 flex bg-gray-900">
-      {/* MAIN CONTENT - FLEX LAYOUT */}
-      <div className={`flex-1 flex flex-col transition-all ${
-        showLocationSelector || showItemBrowser || showInventory || showGMPanel ? 'w-1/2' : 'w-full'
-      }`}>
-        {/* Header */}
+    <div className="fixed inset-0 flex bg-gray-900 text-white">
+      
+      {/* Kolumna 1: Czat */}
+      <div className="w-1/3 flex flex-col h-full border-r border-gray-700">
         <div className="bg-gray-800 border-b border-gray-700 p-4 flex-shrink-0">
           <div className="flex justify-between items-center">
             <div>
@@ -264,210 +351,81 @@ function MultiplayerSession({ campaign, character, onEnd }) {
                   {connected ? '🟢 Connected' : '🔴 Disconnected'}
                   {isGM && <span className="ml-2 text-yellow-400">👑 Game Master</span>}
                 </p>
-                <p className="text-yellow-400 text-sm">
-                  📍 {currentLocation}
-                </p>
               </div>
             </div>
             
-            {/* GM TOOLS BUTTONS */}
-            <div className="flex gap-2">
-              {isGM && (
-                <>
-                  <button
-                    onClick={() => {
-                      setShowLocationSelector(!showLocationSelector);
-                      setShowItemBrowser(false);
-                      setShowGMPanel(false);
-                      setShowInventory(false);
-                    }}
-                    className={`px-4 py-2 rounded-lg font-semibold transition ${
-                      showLocationSelector ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
-                    }`}
-                  >
-                    📍 Location
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowItemBrowser(!showItemBrowser);
-                      setShowLocationSelector(false);
-                      setShowGMPanel(false);
-                      setShowInventory(false);
-                    }}
-                    className={`px-4 py-2 rounded-lg font-semibold transition ${
-                      showItemBrowser ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
-                    }`}
-                  >
-                    🎒 Items
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowGMPanel(!showGMPanel);
-                      setShowLocationSelector(false);
-                      setShowItemBrowser(false);
-                      setShowInventory(false);
-                    }}
-                    className={`px-4 py-2 rounded-lg font-semibold transition ${
-                      showGMPanel ? 'bg-purple-600' : 'bg-gray-700 hover:bg-gray-600'
-                    }`}
-                  >
-                    👑 Players
-                  </button>
-                </>
-              )}
-              
-              {/* PLAYER INVENTORY BUTTON */}
-              {!isGM && (
-                <button
-                  onClick={() => {
-                    setShowInventory(!showInventory);
-                    setShowLocationSelector(false);
-                    setShowItemBrowser(false);
-                    setShowGMPanel(false);
-                  }}
-                  className={`px-4 py-2 rounded-lg font-semibold transition ${
-                    showInventory ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
-                  }`}
-                >
-                  🎒 Inventory
-                </button>
-              )}
-              
-              <button
-                onClick={onEnd}
-                className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-semibold transition"
-              >
-                Leave
-              </button>
-            </div>
+            {/* ✅ MODYFIKACJA: Przycisk Leave/End Session */}
+            <button
+              onClick={isGM ? handleEndSession : onEnd}
+              className={`px-4 py-2 rounded-lg font-semibold transition ${
+                isGM 
+                ? 'bg-red-600 hover:bg-red-700' 
+                : 'bg-gray-600 hover:bg-gray-700'
+              }`}
+            >
+              {isGM ? 'End Session' : 'Leave'}
+            </button>
+            
           </div>
         </div>
 
-        {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {messages.map((msg, index) => renderMessage(msg, index))}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
         <div className="bg-gray-800 border-t border-gray-700 p-4 flex-shrink-0">
-          <div className="max-w-4xl mx-auto">
-            
-            {/* GM CONTROLS - tylko dla GM */}
-            {isGM && (
-              <div className="mb-4 bg-gradient-to-r from-purple-900 to-indigo-900 rounded-lg p-4 border-l-4 border-purple-500">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-yellow-400 font-bold">🎭 GM Controls</span>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  <button
-                    onClick={() => handleGMAction('gm_narration')}
-                    className="bg-yellow-700 hover:bg-yellow-600 px-3 py-2 rounded text-sm font-semibold transition flex items-center gap-2"
-                  >
-                    📖 Narration
-                  </button>
-                  <button
-                    onClick={() => handleGMAction('gm_event')}
-                    className="bg-orange-700 hover:bg-orange-600 px-3 py-2 rounded text-sm font-semibold transition flex items-center gap-2"
-                  >
-                    ⚡ Event
-                  </button>
-                  <button
-                    onClick={() => handleGMAction('gm_choice')}
-                    className="bg-blue-700 hover:bg-blue-600 px-3 py-2 rounded text-sm font-semibold transition flex items-center gap-2"
-                  >
-                    🎯 Choice
-                  </button>
-                </div>
+          {isGM && (
+            <div className="mb-4 bg-gradient-to-r from-purple-900 to-indigo-900 rounded-lg p-4 border-l-4 border-purple-500">
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={() => handleGMAction('gm_narration')} className="bg-yellow-700 hover:bg-yellow-600 px-3 py-2 rounded text-sm font-semibold">📖 Narration</button>
+                <button onClick={() => handleGMAction('gm_event')} className="bg-orange-700 hover:bg-orange-600 px-3 py-2 rounded text-sm font-semibold">⚡ Event</button>
+                <button onClick={() => handleGMAction('gm_choice')} className="bg-blue-700 hover:bg-blue-600 px-3 py-2 rounded text-sm font-semibold">🎯 Choice</button>
               </div>
-            )}
-
-            {/* PLAYER Quick Actions - tylko dla graczy */}
-            {!isGM && (
-              <div className="flex gap-2 mb-3">
-                <button
-                  onClick={() => handleQuickAction('I look around the room')}
-                  className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm text-gray-300 transition"
-                >
-                  👁️ Look Around
-                </button>
-                <button
-                  onClick={() => handleQuickAction('I talk to the NPC', 'player_speech')}
-                  className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm text-gray-300 transition"
-                >
-                  💬 Talk
-                </button>
-                <button
-                  onClick={() => handleQuickAction('I search for items')}
-                  className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm text-gray-300 transition"
-                >
-                  🔍 Search
-                </button>
-              </div>
-            )}
-
-            {/* Message Input */}
-            <form onSubmit={sendMessage} className="flex gap-3">
-              <input
-                type="text"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                placeholder={isGM ? "Narrate, describe events..." : "Describe your action..."}
-                className="flex-1 bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                type="submit"
-                className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg font-semibold transition"
-              >
-                Send
-              </button>
-            </form>
-          </div>
+            </div>
+          )}
+          {!isGM && (
+            <div className="flex gap-2 mb-3">
+              <button onClick={() => handleQuickAction('I look around the room')} className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm text-gray-300">👁️ Look Around</button>
+            </div>
+          )}
+          
+          <DiceRoller campaignId={campaign.id} characterId={character.id} />
+          
+          <form onSubmit={sendMessage} className="flex gap-3 mt-2">
+            <input
+              type="text"
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              placeholder={isGM ? "Narrate, describe events..." : "Describe your action..."}
+              className="flex-1 bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button type="submit" className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg font-semibold transition">Send</button>
+          </form>
         </div>
       </div>
 
-      {/* SIDE PANEL - GM Tools & Player Inventory */}
-      {(showLocationSelector || showItemBrowser || showInventory || showGMPanel) && (
-        <div className="w-1/2 bg-gray-800 border-l border-gray-700 overflow-y-auto">
-          <div className="p-4">
-            {/* Location Selector */}
-            {showLocationSelector && (
-              <LocationSelector
-                universe={campaign.universe}
-                onLocationSelect={handleLocationChange}
-                isGM={isGM}
-              />
-            )}
-
-            {/* Item Browser (old GM item browser) */}
-            {showItemBrowser && (
-              <ItemBrowser
-                onItemSelect={handleItemSelect}
-                universe={campaign.universe}
-                isGM={isGM}
-              />
-            )}
-
-            {/* Player Inventory */}
-            {showInventory && !isGM && currentUser && (
-              <PlayerInventoryPanel
-                campaignId={campaign.id}
-                userId={currentUser.id}
-                isGM={false}
-              />
-            )}
-
-            {/* GM Player Manager */}
-            {showGMPanel && isGM && (
-              <GMPlayerManager
-                campaign={campaign}
-                isGM={isGM}
-                universe={campaign.universe}
-              />
-            )}
-          </div>
+      {/* Kolumna 2: Panel Główny */}
+      <div className="w-1/3 flex flex-col h-full border-r border-gray-700">
+        <div className="bg-gray-800 border-b border-gray-700 p-4 flex-shrink-0">
+          <div className="flex gap-2">{renderPanelButtons()}</div>
         </div>
-      )}
+        <div className="flex-1 overflow-y-auto p-4">
+          {currentUser && renderMiddlePanel()}
+        </div>
+      </div>
+
+      {/* Kolumna 3: Panel Kontekstowy */}
+      <div className="w-1/3 flex flex-col h-full">
+         <div className="bg-gray-800 border-b border-gray-700 p-4 flex-shrink-0">
+             <h3 className="text-xl font-bold text-white">📍 Current Location</h3>
+             <p className="text-yellow-400 text-lg font-semibold">{currentLocation}</p>
+         </div>
+         <div className="flex-1 overflow-y-auto p-4">
+            {currentUser && renderRightPanel()}
+         </div>
+      </div>
+
     </div>
   );
 }

@@ -1,3 +1,4 @@
+# backend/app/models/user.py
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -17,3 +18,17 @@ class User(Base):
     # Relacje
     characters = relationship("Character", back_populates="owner")
     game_sessions = relationship("GameSession", back_populates="game_master")
+    
+    # ✅ NOWE: Relacje znajomych
+    sent_friend_requests = relationship(
+        "Friendship",
+        foreign_keys="Friendship.sender_id",
+        back_populates="sender",
+        cascade="all, delete-orphan"
+    )
+    received_friend_requests = relationship(
+        "Friendship",
+        foreign_keys="Friendship.receiver_id",
+        back_populates="receiver",
+        cascade="all, delete-orphan"
+    )

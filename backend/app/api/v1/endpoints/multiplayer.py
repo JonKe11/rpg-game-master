@@ -67,21 +67,45 @@ async def create_campaign(
         "universe": campaign.universe
     }
 
+# W pliku backend/app/api/v1/endpoints/multiplayer.py
+# Zastąp funkcję list_campaigns tą wersją:
+
 @router.get("/campaigns/")
 async def list_campaigns(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Zwraca listę kampanii, do których użytkownik ma dostęp"""
+    """
+    Zwraca kampanie:
+    1. Publiczne
+    2. Prywatne, których jestem twórcą
+    3. Prywatne, stworzone przez moich znajomych
+    """
+    from app.models.friendship import Friendship, FriendshipStatus
+    from sqlalchemy import or_, and_
+
+    # Pobierz ID znajomych
+    friends_ships = db.query(Friendship).filter(
+        or_(Friendship.sender_id == current_user.id, Friendship.receiver_id == current_user.id),
+        Friendship.status == FriendshipStatus.ACCEPTED
+    ).all()
     
+    friend_ids = []
+    for f in friends_ships:
+        fid = f.receiver_id if f.sender_id == current_user.id else f.sender_id
+        friend_ids.append(fid)
+    
+    # Główne zapytanie
     campaigns = db.query(MultiplayerCampaign).filter(
-        (MultiplayerCampaign.is_public == True) | 
-        (MultiplayerCampaign.creator_id == current_user.id) # Zawsze pokazuj prywatne kampanie twórcy
+        or_(
+            MultiplayerCampaign.is_public == True,                 # Publiczne
+            MultiplayerCampaign.creator_id == current_user.id,     # Moje
+            MultiplayerCampaign.creator_id.in_(friend_ids)         # Znajomych
+        )
     ).filter(
         MultiplayerCampaign.status.in_([CampaignStatus.LOBBY, CampaignStatus.ACTIVE, CampaignStatus.PAUSED])
     ).all()
     
-    # ✅ ZMIANA: Zwracamy listę ID uczestników, aby frontend wiedział, czy gracz może dołączyć
     return [
         {
             "id": c.id,
@@ -92,8 +116,9 @@ async def list_campaigns(
             "max_players": c.max_players,
             "has_gm": c.game_master_id is not None,
             "created_at": c.created_at.isoformat(),
-            "participant_ids": [p.get("user_id") for p in (c.participants or [])], # ✅ NOWE POLE
-            "creator_id": c.creator_id
+            "participant_ids": [p.get("user_id") for p in (c.participants or [])],
+            "creator_id": c.creator_id,
+            "is_friend_campaign": c.creator_id in friend_ids # Flaga dla frontendu
         }
         for c in campaigns
     ]
