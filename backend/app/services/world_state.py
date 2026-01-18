@@ -12,10 +12,10 @@ import json
 class NPC:
     """Non-Player Character data"""
     name: str
-    race: str  # MUST be canon
-    role: str  # "smuggler", "vendor", "guard"
+    race: str  
+    role: str 
     location: str
-    attitude: int = 0  # -10 to +10 (hostile to friendly)
+    attitude: int = 0  
     first_met_turn: int = 0
     last_seen_turn: int = 0
     notes: List[str] = field(default_factory=list)
@@ -26,8 +26,8 @@ class NPC:
 @dataclass
 class Location:
     """A specific place in the world"""
-    name: str  # "Rusty Cantina", "Spaceport District"
-    planet: str  # MUST be canon planet
+    name: str  
+    planet: str  
     description: str
     visited: bool = False
     first_visit_turn: int = 0
@@ -46,31 +46,31 @@ class WorldState:
         self.created_at = datetime.now()
         self.last_updated = datetime.now()
         
-        # IMMUTABLE FACTS (set once, never change)
-        self.homeworld = homeworld or starting_planet  # Origin planet (backstory)
-        self.starting_planet = starting_planet  # Where campaign actually starts
-        self.current_planet = starting_planet  # Can change via travel
-        self.capital_city = capital_city  # e.g., "Hanna City"
+      
+        self.homeworld = homeworld or starting_planet  
+        self.starting_planet = starting_planet  
+        self.current_planet = starting_planet
+        self.capital_city = capital_city  
         
-        # DYNAMIC STATE
+   
         self.current_location: Optional[Location] = None
-        self.npcs: Dict[str, NPC] = {}  # name -> NPC
-        self.locations: Dict[str, Location] = {}  # name -> Location
+        self.npcs: Dict[str, NPC] = {}  
+        self.locations: Dict[str, Location] = {}  
         
-        # HISTORY & MEMORY
+       
         self.established_facts: List[str] = []
         self.memory_traces: List[Dict] = []
         self.timeline: List[Dict] = []
         
-        # PLAYER STATE
+       
         self.player_inventory: List[str] = []
         self.player_relationships: Dict[str, int] = {}
         
-        # QUEST/STORY STATE
+      
         self.active_quests: List[str] = []
         self.completed_quests: List[str] = []
         
-        # Initialize with planet facts
+       
         if capital_city:
             self.add_established_fact(
                 f"The capital city of {starting_planet} is {capital_city}",
@@ -194,7 +194,7 @@ class WorldState:
     def get_world_context_for_prompt(self, include_timeline: bool = False) -> str:
         """Generate context string for AI prompt"""
         
-        # 🆕 Add moon information if relevant
+     
         moon_info = ""
         if self.current_planet in ['Nar Shaddaa', 'Yavin 4', 'Endor']:
             moon_relationships = {
@@ -210,13 +210,13 @@ class WorldState:
   (DO NOT CONTRADICT ANY INFORMATION BELOW)
 ╚════════════════════════════════════════════╝
 
-🌍 CURRENT LOCATION:
+ CURRENT LOCATION:
 - Universe: {self.universe}
 - Homeworld (origin): {self.homeworld} [character's birthplace - for backstory]
 - Current Location: {self.current_planet} ✓ [STAY HERE - DO NOT CHANGE]{moon_info}
 - Capital City: {self.capital_city if self.capital_city else '[Not specified - you can choose any location on planet]'}
 
-👥 KNOWN NPCs (DO NOT CHANGE THEIR RACES/ROLES):
+ KNOWN NPCs (DO NOT CHANGE THEIR RACES/ROLES):
 """
         
         if self.npcs:
@@ -225,37 +225,37 @@ class WorldState:
         else:
             context += "- None yet\n"
         
-        context += "\n📍 VISITED LOCATIONS:\n"
+        context += "\n VISITED LOCATIONS:\n"
         if self.locations:
             for loc_name, loc in self.locations.items():
                 context += f"- {loc_name} on {loc.planet}\n"
         else:
             context += "- Only starting area\n"
         
-        context += "\n⚡ ESTABLISHED FACTS (NEVER CONTRADICT):\n"
+        context += "\n ESTABLISHED FACTS (NEVER CONTRADICT):\n"
         if self.established_facts:
             for fact in self.established_facts:
                 context += f"- {fact}\n"
         else:
             context += "- None yet\n"
         
-        # Critical memories
+   
         critical_memories = self.get_critical_memory_traces()
         if critical_memories:
-            context += "\n🔥 CRITICAL MEMORIES:\n"
+            context += "\n CRITICAL MEMORIES:\n"
             for mem in critical_memories:
                 context += f"- Turn {mem['turn']}: {mem['description']}\n"
         
-        # Recent memories
+   
         recent_memories = [m for m in self.get_recent_memory_traces(5) 
                           if not m.get('is_critical', False)]
         if recent_memories:
-            context += "\n📝 RECENT EVENTS:\n"
+            context += "\n RECENT EVENTS:\n"
             for mem in recent_memories:
                 context += f"- Turn {mem['turn']}: {mem['description']}\n"
         
         if include_timeline:
-            context += "\n📜 FULL TIMELINE:\n"
+            context += "\n FULL TIMELINE:\n"
             for event in self.timeline[-10:]:
                 context += f"- Turn {event['turn']}: {event['description']}\n"
         

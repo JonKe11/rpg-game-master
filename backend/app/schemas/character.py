@@ -1,5 +1,5 @@
 # backend/app/schemas/character.py
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional, Dict, List, Any
 from datetime import datetime
 
@@ -12,16 +12,19 @@ class CharacterBase(BaseModel):
     description: Optional[str] = None
     backstory: Optional[str] = None
     
+    
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    skin_color: Optional[str] = None
+    eye_color: Optional[str] = None
+    hair_color: Optional[str] = None
+    height: Optional[float] = None
+    mass: Optional[float] = None
+    
     # Star Wars fields
     homeworld: Optional[str] = None
     born_year: Optional[int] = None
     born_era: Optional[str] = "BBY"
-    gender: Optional[str] = None
-    height: Optional[float] = None
-    mass: Optional[float] = None
-    skin_color: Optional[str] = None
-    eye_color: Optional[str] = None
-    hair_color: Optional[str] = None
     
     # KOTOR attributes
     strength: int = 10
@@ -31,7 +34,7 @@ class CharacterBase(BaseModel):
     wisdom: int = 10
     charisma: int = 10
     
-    # KOTOR skills
+
     skill_computer_use: int = 0
     skill_demolitions: int = 0
     skill_stealth: int = 0
@@ -41,9 +44,35 @@ class CharacterBase(BaseModel):
     skill_security: int = 0
     skill_treat_injury: int = 0
     
-    # Legacy
+ 
     cybernetics: Optional[List[str]] = None
     affiliations: Optional[List[str]] = None
+
+
+    @model_validator(mode='before')
+    @classmethod
+    def map_frontend_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+          
+            skill_map = {
+                'computer_use': 'skill_computer_use',
+                'demolitions': 'skill_demolitions',
+                'stealth': 'skill_stealth',
+                'awareness': 'skill_awareness',
+                'persuade': 'skill_persuade',
+                'repair': 'skill_repair',
+                'security': 'skill_security',
+                'treat_injury': 'skill_treat_injury'
+            }
+            for frontend_key, db_key in skill_map.items():
+                if frontend_key in data and db_key not in data:
+                    data[db_key] = int(data[frontend_key] or 0)
+            
+        
+            if 'species' in data and 'race' not in data:
+                data['race'] = data['species']
+                
+        return data
 
 class CharacterCreate(CharacterBase):
     pass
@@ -55,15 +84,18 @@ class CharacterUpdate(BaseModel):
     level: Optional[int] = None
     description: Optional[str] = None
     backstory: Optional[str] = None
-    homeworld: Optional[str] = None
-    born_year: Optional[int] = None
-    born_era: Optional[str] = None
+    
+    age: Optional[int] = None
     gender: Optional[str] = None
-    height: Optional[float] = None
-    mass: Optional[float] = None
     skin_color: Optional[str] = None
     eye_color: Optional[str] = None
     hair_color: Optional[str] = None
+    height: Optional[float] = None
+    mass: Optional[float] = None
+    
+    homeworld: Optional[str] = None
+    born_year: Optional[int] = None
+    born_era: Optional[str] = None
     
     strength: Optional[int] = None
     dexterity: Optional[int] = None
@@ -86,6 +118,26 @@ class CharacterUpdate(BaseModel):
     stats: Optional[Dict[str, Any]] = None
     inventory: Optional[List[Dict[str, Any]]] = None
     skills: Optional[List[str]] = None
+
+   
+    @model_validator(mode='before')
+    @classmethod
+    def map_frontend_update_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            skill_map = {
+                'computer_use': 'skill_computer_use',
+                'demolitions': 'skill_demolitions',
+                'stealth': 'skill_stealth',
+                'awareness': 'skill_awareness',
+                'persuade': 'skill_persuade',
+                'repair': 'skill_repair',
+                'security': 'skill_security',
+                'treat_injury': 'skill_treat_injury'
+            }
+            for frontend_key, db_key in skill_map.items():
+                if frontend_key in data:
+                    data[db_key] = int(data[frontend_key] or 0)
+        return data
 
 class CharacterResponse(CharacterBase):
     id: int

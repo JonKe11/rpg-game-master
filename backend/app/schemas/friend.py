@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 class FriendRequestCreate(BaseModel):
-    username: str # Szukamy po nazwie użytkownika
+    username: str 
 
 class FriendResponse(BaseModel):
     id: int
@@ -14,4 +14,4 @@ class FriendResponse(BaseModel):
         from_attributes = True
 
 class FriendshipUpdate(BaseModel):
-    status: str # 'accepted' or 'rejected'
+    status: str 

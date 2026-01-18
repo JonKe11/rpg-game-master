@@ -2,10 +2,8 @@
 """
 Base class for all wiki API clients.
 
-✅ FIXED: Added MediaWiki API for Canon articles category
-- FANDOM API doesn't support "Canon articles" category
-- MediaWiki API works for all categories
-- Automatic fallback between APIs
+✅ FIXED: Added search() and get_details() methods required by ScraperService.
+✅ FIXED: Added MediaWiki API for Canon articles category.
 
 Provides:
 - Rate limiting
@@ -17,11 +15,12 @@ Provides:
 - MediaWiki API fallback
 """
 
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Any
 import asyncio
 import aiohttp
 from datetime import datetime
 import logging
+from types import SimpleNamespace
 
 from app.core.wiki.wiki_factory import WikiConfig
 from app.core.wiki.rate_limiter import RateLimiter
@@ -173,7 +172,7 @@ class BaseWikiClient:
         if self._session and not self._session.closed:
             await self._session.close()
             self._session = None
-    
+            await asyncio.sleep(0.50)
     # ============================================
     # CONCRETE METHODS
     # ============================================
@@ -250,10 +249,10 @@ class BaseWikiClient:
         """
         Make rate-limited API request.
         
-        ✅ FIXED: Ensures correct URL for FANDOM API endpoints
+        ✅ FIXED: Ensures correct URL for FANDOM API endpoints (Articles and Search)
         
         Args:
-            endpoint: API endpoint (e.g., "/Articles/List")
+            endpoint: API endpoint (e.g., "/Articles/List" or "/Search/List")
             params: Query parameters
             
         Returns:
@@ -265,7 +264,8 @@ class BaseWikiClient:
         base_url = self.base_url
         
         # FANDOM API endpoints need /api/v1, not /wiki
-        if endpoint.startswith('/Articles'):
+        # Added /Search check here
+        if endpoint.startswith('/Articles') or endpoint.startswith('/Search'):
             # This is a FANDOM API endpoint
             if 'fandom.com' in base_url:
                 # Extract domain and add /api/v1
@@ -288,6 +288,94 @@ class BaseWikiClient:
             self.stats['requests_failed'] += 1
             logger.error(f"Request failed for {self.config.name}: {e}")
             raise
+
+    # ============================================
+    # ✅ NEW: REQUIRED METHODS FOR SCRAPER
+    # ============================================
+
+    async def search(self, query: str, limit: int = 1) -> List[Dict]:
+        """
+        Search for articles using MediaWiki API (more reliable than Fandom API).
+        """
+        # Build api.php URL
+        if 'fandom.com' in self.base_url:
+            domain_parts = self.base_url.split('/api')[0].split('/wiki')[0]
+            base_url = f"{domain_parts}/api.php"
+        else:
+            base_url = self.base_url.replace('/api/v1', '/api.php')
+
+        params = {
+            'action': 'query',
+            'list': 'search',
+            'srsearch': query,
+            'srlimit': limit,
+            'format': 'json'
+        }
+
+        await self._ensure_session()
+        await self.rate_limiter.acquire()
+
+        try:
+            self.stats['requests_made'] += 1
+            async with self._session.get(base_url, params=params) as response:
+                response.raise_for_status()
+                data = await response.json()
+                
+                results = []
+                if 'query' in data and 'search' in data['query']:
+                    for item in data['query']['search']:
+                        results.append({
+                            'id': item['pageid'],
+                            'title': item['title'],
+                            # Prosty URL wiki
+                            'url': f"{self.base_url.split('/api')[0]}/wiki/{item['title'].replace(' ', '_')}" 
+                        })
+                return results
+        except Exception as e:
+            logger.warning(f"Search failed for '{query}': {e}")
+            return []
+
+    async def get_details(self, title: str) -> Optional[Any]:
+        """
+        Get details for an article by TITLE.
+        Used by ScraperService.
+        
+        Since Fandom API details endpoint typically requires IDs,
+        this method first searches for the ID if necessary.
+        
+        Returns:
+            Object with .title, .content, .image_url, .url attributes
+        """
+        try:
+            # 1. Resolve ID from title (using our search method)
+            # This is necessary because /Articles/Details typically needs an ID
+            search_results = await self.search(title, limit=1)
+            
+            if not search_results:
+                return None
+                
+            article_id = search_results[0]['id']
+            
+            # 2. Fetch details using ID
+            details_dict = await self.get_article_details_batch([article_id])
+            data = details_dict.get(str(article_id))
+            
+            if not data:
+                return None
+
+            # 3. Wrap in a simple object to satisfy ScraperService (dot notation)
+            # ScraperService expects: details.title, details.content, details.image_url
+            result = SimpleNamespace()
+            result.title = data.get('title', title)
+            result.content = data.get('abstract', '')
+            result.image_url = data.get('thumbnail')
+            result.url = data.get('url')
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to get details for '{title}': {e}")
+            return None
     
     # ============================================
     # ✅ NEW: MEDIAWIKI API METHODS
@@ -322,8 +410,6 @@ class BaseWikiClient:
         else:
             # Generic fallback
             base_url = self.base_url.replace('/api/v1', '/api.php')
-        
-        logger.debug(f"MediaWiki API URL: {base_url}")
         
         params = {
             'action': 'query',
@@ -723,8 +809,6 @@ class BaseWikiClient:
         """
         Categorize articles by fetching their categories and matching.
         
-        ✅ MAIN NEW METHOD: This replaces the old category-specific fetching!
-        
         Process:
         1. Fetch categories for all articles (batch)
         2. Categorize each article using keyword matching
@@ -829,7 +913,7 @@ class BaseWikiClient:
         return categorized
     
     # ============================================
-    # ✅ MAIN ENTRY POINT (FIXED)
+    # MAIN ENTRY POINT
     # ============================================
     
     async def get_all_canonical_data_smart(
@@ -906,19 +990,15 @@ class BaseWikiClient:
                 article_ids = [a['id'] for a in articles]
                 details = await self.get_article_details_batch(article_ids)
                 
-                # ✅ NOWA, POPRAWNA WERSJA (do wklejenia w backend/app/core/wiki/base_wiki_client.py)
-
                 # Enrich
                 for article in articles:
                     article_id = article['id']
                     detail = details.get(str(article_id), {})
                     
-                    # ✅ Scal cały słownik 'detail' z 'article'
-                    # To doda 'abstract', 'thumbnail' ORAZ wszystkie klucze infoboxa
-                    # (jak 'Region', 'Sector', 'System', 'Planet' itd.)
+                    # ✅ Merge full detail dictionary into article
                     article.update(detail)
                     
-                    # Upewnij się, że image_url jest ustawiony (fallback na thumbnail)
+                    # Ensure image_url is set (fallback to thumbnail)
                     if not article.get('image_url'):
                         article['image_url'] = article.get('thumbnail')
         
@@ -928,7 +1008,7 @@ class BaseWikiClient:
         return categorized
     
     # ============================================
-    # BATCH OPERATIONS (Kept from original)
+    # BATCH OPERATIONS
     # ============================================
     
     async def get_article_details_batch(
@@ -1009,7 +1089,7 @@ class BaseWikiClient:
         }
     
     # ============================================
-    # LEGACY COMPATIBILITY (old methods still work)
+    # LEGACY COMPATIBILITY
     # ============================================
     
     async def get_all_canonical_data(
@@ -1042,8 +1122,6 @@ class BaseWikiClient:
     ) -> List[Dict]:
         """
         Legacy method - kept for compatibility.
-        
-        Note: Smart categorization is now preferred!
         """
         logger.warning(
             f"⚠️ Using legacy category fetch for {frontend_category}. "

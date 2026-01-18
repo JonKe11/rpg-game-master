@@ -1,22 +1,16 @@
 # backend/app/api/v1/endpoints/game_sessions.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Dict, List
-
-from app.core.dependencies import get_db, get_game_master, get_session_storage
+from typing import Dict, List, Optional
+from datetime import datetime
+from app.core.dependencies import get_db, get_current_user
+from app.models.user import User
 from app.repositories.session_repository import SessionRepository
 from app.repositories.character_repository import CharacterRepository
-from app.schemas.session import StartSessionRequest
-from app.schemas.game_session import (
-    SessionActionRequest,
-    SessionActionResponse,
-)
-from app.schemas.campaign import CampaignStartRequest  # 🆕 NOWY
-from app.schemas.session import GameSessionResponse
 from app.services.game_master_service import GameMasterService
-from app.services.story_aware_game_master import StoryAwareGameMaster  # 🆕 NOWY
-from app.core.ai.adaptive_game_master import AdaptiveGameMaster
-from app.services.session_storage import SessionStorage
+from app.schemas.session import StartSessionRequest, GameSessionResponse
+from app.schemas.game_session import SessionActionRequest, SessionActionResponse
+from app.schemas.campaign import CampaignStartRequest
 
 router = APIRouter()
 
@@ -24,261 +18,179 @@ router = APIRouter()
 async def start_game_session(
     request: StartSessionRequest,
     db: Session = Depends(get_db),
-    game_master: AdaptiveGameMaster = Depends(get_game_master),
-    storage: SessionStorage = Depends(get_session_storage)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Start new game session (legacy - without campaign structure)
-    Use /start-campaign for full story arc experience
+    Rozpoczyna nową sesję z Agentem AI (Stateful RAG Agent).
+    Tworzy sesję w bazie i generuje wprowadzenie fabularne.
     """
-    # Get character
+    # 1. Pobierz dane postaci
     char_repo = CharacterRepository(db)
     character = char_repo.get(request.character_id)
     
     if not character:
         raise HTTPException(status_code=404, detail="Character not found")
     
-    # Create session in database
+    # 2. Utwórz sesję w bazie danych
     session_repo = SessionRepository(db)
     session = session_repo.create(
-        title=request.title or f"Adventure of {character.name}",
+        title=request.title or f"Przygoda: {character.name}",
         universe=character.universe,
         status="active",
-        game_master_id=1,
-        participants=[character.id]
+        game_master_id=current_user.id,
+        participants=[{
+            "character_id": character.id, 
+            "name": character.name,
+            "race": character.race,
+            "class": character.class_type
+        }]
     )
     
-    # Prepare character data
-    character_data = {
-        'id': character.id,
-        'name': character.name,
-        'universe': character.universe,
-        'race': character.race,
-        'class_type': character.class_type,
-        'level': character.level,
-        'homeworld': getattr(character, 'homeworld', None),
-        'session_id': session.id
-    }
+    # 3. Inicjalizacja Serwisu GM (Nowa architektura)
+    # Serwis sam inicjalizuje wewnątrz AgentGameMaster i PostgresCacheService
+    gm_service = GameMasterService(db)
     
-    # Start with basic Game Master (no campaign)
-    gm_service = GameMasterService(game_master, storage)
-    intro = gm_service.start_session(
-        session.id,
-        character_data,
-        character.universe
-    )
-    
-    return {
-        'session_id': session.id,
-        'character': character_data,
-        'intro': intro
-    }
+    try:
+        # 4. Wygeneruj intro (Symulujemy polecenie systemowe dla Agenta)
+        # Agent przeanalizuje stan, biografię (jeśli jest w bazie) i wiki.
+        intro_prompt = (
+            "[SYSTEM]: Rozpocznij nową przygodę. "
+            f"Postać gracza: {character.name} (Rasa: {character.race}, Klasa: {character.class_type}). "
+            "Opisz klimatyczne miejsce startowe pasujące do uniwersum i tej postaci. "
+            "Zakończ pytaniem co gracz chce zrobić."
+        )
+        
+        # Wywołujemy processing jako użytkownik 'System' aby nadać kontekst
+        intro_response = gm_service.process_player_input(
+            session_id=session.id,
+            user_input=intro_prompt,
+            user_name="System"
+        )
+        
+        return {
+            'session_id': session.id,
+            'intro': intro_response['message'],
+            'game_state': intro_response.get('game_state', {}),
+            'character': {
+                'id': character.id,
+                'name': character.name
+            }
+        }
+    except Exception as e:
+        print(f"❌ Start Session Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to start session: {str(e)}")
+
 
 @router.post("/start-campaign", response_model=Dict)
 async def start_campaign_session(
     request: CampaignStartRequest,
     db: Session = Depends(get_db),
-    game_master: AdaptiveGameMaster = Depends(get_game_master),
-    storage: SessionStorage = Depends(get_session_storage)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    🆕 Start new CAMPAIGN with full story arc
-    - AI plans campaign structure
-    - Story beats tracking
-    - RAG with wiki knowledge
-    - Canon validation
+    Uruchamia tryb kampanii. W nowej architekturze RAG Agent obsługuje
+    zarówno "zwykłe" sesje jak i kampanie w ten sam, stanowy sposób.
     """
-    # Get character
-    char_repo = CharacterRepository(db)
-    character = char_repo.get(request.character_id)
-    
-    if not character:
-        raise HTTPException(status_code=404, detail="Character not found")
-    
-    # Create session in database
-    session_repo = SessionRepository(db)
-    session = session_repo.create(
-        title=request.title or f"Campaign: {character.name}",
-        universe=character.universe,
-        status="active",
-        game_master_id=1,
-        participants=[character.id]
+    # Mapujemy request kampanii na request sesji, zachowując spójność
+    session_request = StartSessionRequest(
+        character_id=request.character_id,
+        title=request.title,
+        universe="star_wars"  # Domyślnie, lub można pobrać z postaci wewnątrz start_game_session
     )
-    
-    # Prepare character data
-    character_data = {
-        'id': character.id,
-        'name': character.name,
-        'universe': character.universe,
-        'race': character.race,
-        'class_type': character.class_type,
-        'level': character.level,
-        'description': character.description,
-        'homeworld': getattr(character, 'homeworld', None),
-        'session_id': session.id
-    }
-    
-    # Start with Story-Aware Game Master
-    story_gm = StoryAwareGameMaster(game_master, storage)
-    
-    # Check if session already has intro (for consistency)
-    existing_intro = storage.get_intro(session.id)
-    existing_campaign = storage.get_campaign(session.id)
-    
-    if existing_intro and existing_campaign:
-        print(f"♻️ Reusing existing campaign for session {session.id}")
-        return {
-            'session_id': session.id,
-            'character': character_data,
-            'intro': existing_intro['message'],
-            'campaign': {
-                'title': existing_campaign.title,
-                'theme': existing_campaign.main_theme,
-                'progress': existing_campaign.get_progress_percentage(),
-                'current_beat': existing_campaign.get_current_beat().title if existing_campaign.get_current_beat() else None,
-                'estimated_turns': existing_campaign.total_estimated_turns
-            },
-            'type': 'campaign'
-        }
-    
-    # Generate NEW campaign
-    try:
-        result = story_gm.start_campaign(
-            session.id,
-            character_data,
-            character.universe,
-            campaign_length=request.campaign_length
-        )
-        
-        return {
-            'session_id': session.id,
-            'character': character_data,
-            'intro': result['message'],
-            'campaign': result.get('campaign', {}),
-            'type': 'campaign'
-        }
-    except Exception as e:
-        print(f"❌ Campaign start error: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to start campaign: {str(e)}")
+    return await start_game_session(session_request, db, current_user)
+
 
 @router.post("/action", response_model=SessionActionResponse)
 async def process_action(
     request: SessionActionRequest,
     db: Session = Depends(get_db),
-    game_master: AdaptiveGameMaster = Depends(get_game_master),
-    storage: SessionStorage = Depends(get_session_storage)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Process player action
-    Automatically uses story-aware GM if campaign exists
+    Przetwarza akcję gracza.
     """
-    # Check if this is a campaign session
-    campaign = storage.get_campaign(request.session_id)
+    gm_service = GameMasterService(db)
     
-    if campaign:
-        # Use story-aware GM
-        story_gm = StoryAwareGameMaster(game_master, storage)
+    try:
+        print(f"➡️ Processing action for session {request.session_id}: {request.action}") # DEBUG
         
-        try:
-            response = story_gm.process_action_with_story(
-                request.session_id,
-                request.action
-            )
-            
-            # Update session in DB
-            session_repo = SessionRepository(db)
-            session_repo.update_last_played(request.session_id)
-            
-            return SessionActionResponse(**response)
-        except Exception as e:
-            print(f"❌ Story action error: {e}")
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(status_code=500, detail=str(e))
-    else:
-        # Use basic GM (legacy)
-        gm_service = GameMasterService(game_master, storage)
+        response_data = gm_service.process_player_input(
+            session_id=request.session_id,
+            user_input=request.action,
+            user_name=current_user.username
+        )
         
-        try:
-            response = gm_service.process_action(
-                request.session_id,
-                request.action
-            )
+        current_location = None
+        game_state = response_data.get('game_state')
+        if game_state and isinstance(game_state, dict):
+            current_location = game_state.get('current_location')
+
+        return SessionActionResponse(
+            message=response_data['message'],
+            type=response_data['type'],
+            location=current_location,
+            timestamp=datetime.now(), 
+            narrative_style="agentic",
+            choices=[],
+            effects=[]
+        )
+        
+    except ValueError as e:
+        # ✅ ZMIANA: Logujemy dokładny błąd przed rzuceniem 404
+        print(f"❌ ValueError in process_action: {e}")
+        import traceback
+        traceback.print_exc()
+        # Jeśli błąd to "Session not found", to faktycznie 404. W przeciwnym razie to błąd serwera (500)
+        if "Session not found" in str(e):
+            raise HTTPException(status_code=404, detail="Session not found")
+        else:
+            raise HTTPException(status_code=500, detail=f"Internal Value Error: {str(e)}")
             
-            session_repo = SessionRepository(db)
-            session_repo.update_last_played(request.session_id)
-            
-            return SessionActionResponse(**response)
-        except Exception as e:
-            print(f"❌ Action error: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        print(f"❌ Agent Action Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/active", response_model=List[GameSessionResponse])
 async def get_active_sessions(
     db: Session = Depends(get_db)
 ):
-    """Get active game sessions"""
+    """Pobiera listę aktywnych sesji"""
     session_repo = SessionRepository(db)
     return session_repo.get_active_sessions()
+
 
 @router.post("/{session_id}/end")
 async def end_session(
     session_id: int,
-    db: Session = Depends(get_db),
-    storage: SessionStorage = Depends(get_session_storage)
+    db: Session = Depends(get_db)
 ):
-    """End game session and cleanup"""
+    """Kończy sesję (oznacza jako completed)"""
     session_repo = SessionRepository(db)
     session_repo.update(session_id, status="completed")
-    
-    # Cleanup storage
-    storage.delete_context(session_id)
-    storage.delete_campaign(session_id)
-    
     return {"message": "Session ended", "session_id": session_id}
 
-@router.get("/{session_id}/campaign")
-async def get_campaign_status(
-    session_id: int,
-    storage: SessionStorage = Depends(get_session_storage)
-):
-    """🆕 Get campaign progress and status"""
-    campaign = storage.get_campaign(session_id)
-    
-    if not campaign:
-        raise HTTPException(status_code=404, detail="No campaign found for this session")
-    
-    current_beat = campaign.get_current_beat()
-    
-    return {
-        'title': campaign.title,
-        'theme': campaign.main_theme,
-        'antagonist': campaign.main_antagonist,
-        'goal': campaign.final_goal,
-        'progress': {
-            'percent': round(campaign.get_progress_percentage(), 1),
-            'turn': campaign.current_turn,
-            'total_turns': campaign.total_estimated_turns,
-            'act': campaign.current_act,
-            'near_end': campaign.is_near_end()
-        },
-        'current_beat': {
-            'title': current_beat.title if current_beat else None,
-            'description': current_beat.description if current_beat else None,
-            'progress': f"{current_beat.actual_turns_taken}/{current_beat.estimated_turns}" if current_beat else None
-        },
-        'completed_beats': len(campaign.completed_beats),
-        'total_beats': len(campaign.beats)
-    }
 
 @router.post("/roll-dice")
 async def roll_dice(
     dice_type: str = "d20"
 ):
-    """Roll dice"""
-    from app.core.ai.adaptive_game_master import AdaptiveGameMaster
-    gm = AdaptiveGameMaster()
-    result = gm.generate_dice_roll(dice_type)
-    return result
+    """
+    Pomocniczy endpoint do rzutów kośćmi (np. dla przycisku na frontendzie).
+    """
+    import random
+    try:
+        sides = int(dice_type.replace('d', ''))
+        result = random.randint(1, sides)
+        return {
+            "dice": dice_type,
+            "result": result,
+            "critical": "success" if result == sides and sides == 20 else ("failure" if result == 1 and sides == 20 else None),
+            "message": f"Rolled {dice_type}: {result}"
+        }
+    except ValueError:
+         raise HTTPException(status_code=400, detail="Invalid dice type")

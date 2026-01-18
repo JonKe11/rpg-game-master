@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from passlib.context import CryptContext
-import jwt  # Z PyJWT
+import jwt 
 from jwt.exceptions import InvalidTokenError
 
 from app.core.config import get_settings

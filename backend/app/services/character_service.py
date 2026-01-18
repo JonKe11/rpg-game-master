@@ -3,10 +3,10 @@ from typing import List, Optional, Dict
 import logging
 from app.repositories.character_repository import CharacterRepository
 from app.models.character import Character
-# ⛔️ USUNIĘTO: from app.services.wiki_fetcher_service import WikiFetcherService
+
 from app.core.exceptions import NotFoundError, ValidationError
 
-# ✅ NOWE IMPORTY:
+
 from app.models.database import SessionLocal
 from app.services.postgres_cache_service import PostgresCacheService
 
@@ -18,8 +18,7 @@ class CharacterService:
     def __init__(self, character_repository: CharacterRepository):
         self.char_repo = character_repository
         
-        # ✅ NOWA LOGIKA: Bezpośredni dostęp do bazy danych PostgreSQL
-        # Tworzymy osobną sesję, aby uniknąć problemów z zależnościami
+    
         try:
             self.db = SessionLocal()
             self.pg_cache = PostgresCacheService(self.db)
@@ -30,7 +29,7 @@ class CharacterService:
             self.pg_cache = None
 
     def __del__(self):
-        """Zamknij sesję bazy danych, gdy serwis jest niszczony"""
+      
         if self.db:
             self.db.close()
     
@@ -59,11 +58,7 @@ class CharacterService:
         return character
     
     def enhance_with_wiki(self, character_id: int, user_id: int) -> Character:
-        """
-        Enhance character with data from wiki.
-        
-        ✅ ZAKTUALIZOWANE: Używa PostgresCacheService
-        """
+       
         character = self.get_character_if_owner(character_id, user_id)
         
         if not self.pg_cache:
@@ -71,7 +66,7 @@ class CharacterService:
             return character
 
         try:
-            # ✅ NOWA LOGIKA: Pobierz artykuł z bazy PostgreSQL
+        
             article = self.pg_cache.get_article_by_title(
                 character.name,
                 character.universe
@@ -80,7 +75,7 @@ class CharacterService:
             if article and article.content:
                 updates = {}
                 
-                # Użyj 'description' z bazy danych (które jest 'abstract' z Wiki)
+              
                 wiki_description = article.content.get('description')
                 
                 if wiki_description:
@@ -89,7 +84,7 @@ class CharacterService:
                     if not character.backstory:
                         updates['backstory'] = wiki_description[:2000]
                 
-                # Zastosuj aktualizacje
+              
                 if updates:
                     character = self.char_repo.update(character_id, **updates)
                     logger.info(f"✅ Wzbogacono {character.name} o dane z Wiki")
@@ -100,7 +95,7 @@ class CharacterService:
         
         except Exception as e:
             logger.error(f"⚠️ Błąd wzbogacania Wiki dla {character.name}: {e}")
-            # Nie przerywaj - wzbogacanie jest opcjonalne
+            
         
         return character
     

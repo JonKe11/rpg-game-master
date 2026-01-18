@@ -40,11 +40,11 @@ class StoryBeat(BaseModel):
     description: str
     estimated_turns: int
     
-    # Status tracking
-    status: str = "pending"  # pending, active, completed, skipped
+    
+    status: str = "pending"  
     actual_turns_taken: int = 0
     
-    # Trigger conditions (optional)
+    
     required_location: Optional[str] = None
     required_npc: Optional[str] = None
     trigger_keyword: Optional[str] = None
@@ -55,27 +55,27 @@ class CampaignArc(BaseModel):
     title: str
     universe: str
     
-    # Story elements
+    
     main_theme: str  # revenge, discovery, redemption, survival
     main_antagonist: str
     final_goal: str
     
-    # Structure
+  
     total_estimated_turns: int
     current_turn: int = 0
     current_beat_id: Optional[str] = None
     current_act: StoryAct = StoryAct.ACT_1_SETUP
     
-    # Story beats (15-25 kluczowych momentów)
+    
     beats: List[StoryBeat] = []
     
-    # Tracking
+    
     completed_beats: List[str] = []
     
-    # Player choices (wpływają na fabułę)
+   
     major_choices_made: List[Dict] = []
     
-    # Meta
+    
     created_at: datetime = datetime.now()
     last_updated: datetime = datetime.now()
     

@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
+from app.api.v1.endpoints import friends
 from app.core.config import get_settings
 from app.core.exceptions import AppException
 from app.models import Base, engine
@@ -148,7 +148,7 @@ async def app_exception_handler(request: Request, exc: AppException):
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
-
+app.include_router(friends.router, prefix="/api/v1/friends", tags=["friends"])
 # ============================================
 # WEBSOCKET
 # ============================================

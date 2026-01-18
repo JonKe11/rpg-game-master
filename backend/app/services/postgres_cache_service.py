@@ -1,11 +1,5 @@
 # backend/app/services/postgres_cache_service.py
-"""
-PostgreSQL Cache Service - Database operations for wiki cache.
 
-✅ WERSJA 4.0 - Paginacja i Wyszukiwanie
-- Dodano nową, uniwersalną funkcję search_articles_paginated()
-- Stara funkcja search_articles() została zachowana dla kompatybilności wstecznej (jeśli jest potrzebna)
-"""
 
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta, timezone
@@ -34,7 +28,7 @@ class PostgresCacheService:
         self.ttl_days = ttl_days
     
     # ============================================
-    # ✅ GŁÓWNA NOWA FUNKCJA ODCZYTU
+    # GŁÓWNA NOWA FUNKCJA ODCZYTU
     # ============================================
     
     def search_articles_paginated(
@@ -59,29 +53,29 @@ class PostgresCacheService:
             }
         """
         
-        # Podstawowe zapytanie
+        
         db_query = self.db.query(WikiArticle).filter(
             WikiArticle.universe == universe,
             WikiArticle.category == category,
             WikiArticle.expires_at > datetime.now(timezone.utc)
         )
         
-        # Filtrowanie (jeśli jest query)
+        
         if query:
             db_query = db_query.filter(WikiArticle.title.ilike(f'%{query}%'))
             
-        # Filtrowanie (jeśli tylko ze zdjęciami)
+        
         if with_images_only:
             db_query = db_query.filter(
                 WikiArticle.image_url != None,
                 WikiArticle.image_url != ''
             )
 
-        # Pobranie całkowitej liczby pasujących rekordów (dla paginacji)
-        # Robimy to *przed* zastosowaniem limit/offset
+        
+        
         total_count = db_query.count()
 
-        # Zastosowanie paginacji i sortowania
+       
         articles = db_query.order_by(
             WikiArticle.title
         ).offset(
@@ -265,18 +259,18 @@ class PostgresCacheService:
                 result = self.db.execute(stmt)
                 self.db.commit()
                 
-                # Szybkie szacowanie statystyk (mniej dokładne, ale szybsze niż zapytania)
-                # To jest kompromis - w praktyce można by to usprawnić
-                # Na potrzeby tego projektu, zakładamy, że większość to 'created' przy pierwszym uruchomieniu
-                # i 'updated' przy kolejnych.
-                # Uproszczona logika dla szybkości:
-                stats['created'] += len(batch_data) # Zakładamy, że większość to nowe dane lub aktualizacje
+                
+                
+              
+              
+                
+                stats['created'] += len(batch_data) 
                 
             except Exception as e:
                 self.db.rollback()
                 logger.error(f"Batch commit error: {e}")
-                # Logika fallback (indywidualne wstawianie) pominięta dla zwięzłości
-                # W kodzie produkcyjnym byłaby tutaj
+                
+          
                 stats['failed'] += len(batch)
         
         logger.info(f"Bulk upsert complete (approx stats): {stats}")
@@ -454,7 +448,7 @@ class PostgresCacheService:
         log_id: int,
         stats: Dict,
         status: str = 'completed',
-        error_message: Optional[str] = None # ✅ Dodano obsługę błędów
+        error_message: Optional[str] = None # 
     ):
         """Complete scraping operation log."""
         log = self.db.query(ScrapingLog).filter(
@@ -485,7 +479,7 @@ class PostgresCacheService:
         log.images_downloaded = stats.get('images_downloaded', 0)
         log.images_cached = stats.get('images_cached', 0)
         
-        # Zapisz błędy
+      
         if error_message:
             log.errors = (log.errors or []) + [error_message]
         elif stats.get('errors'):

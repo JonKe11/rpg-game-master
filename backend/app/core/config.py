@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     )
     
     # AI
-    ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+    ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
     ollama_timeout: int = 30
     
     # Redis (opcjonalnie - możesz użyć pamięci zamiast Redis)

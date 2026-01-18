@@ -1,17 +1,17 @@
 # backend/app/services/startup_prefetch_service.py
-"""
-✅ WERSJA 3.0 - Całkowicie usunięto UnifiedCacheService
-"""
+
+
+
 import asyncio
 import logging
 from typing import Dict, List, Optional
 from datetime import datetime
 
-# ⛔️ USUNIĘTO: from app.services.unified_cache_service import UnifiedCacheService
+
 from app.core.scraper.image_fetcher import ImageFetcher
 from app.core.wiki import create_wiki_client
 from app.models.database import SessionLocal
-# ✅ NOWY IMPORT: Używamy PostgresCacheService bezpośrednio
+
 from app.services.postgres_cache_service import PostgresCacheService
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ class StartupPrefetchService:
     """
     
     def __init__(self):
-        # ⛔️ USUNIĘTO: self.cache_service = UnifiedCacheService(use_hybrid=True)
+       
         self.image_fetcher = ImageFetcher()
         self.wiki_domain = None 
         self.is_running = False
@@ -49,7 +49,7 @@ class StartupPrefetchService:
         """Initialize hybrid service (lazy)."""
         if self._hybrid_service is None:
             try:
-                # HybridCacheService jest teraz tylko "cienką" warstwą, więc możemy go nadal używać
+              
                 from app.services.hybrid_cache_service import HybridCacheService
                 self._db = SessionLocal()
                 self._hybrid_service = HybridCacheService(self._db)
@@ -76,7 +76,7 @@ class StartupPrefetchService:
         force_refresh: bool = False,
         prefetch_images: bool = True,
         image_workers: int = 20,
-        use_hybrid: bool = True # Ten parametr nie jest już tak potrzebny, ale zostawmy
+        use_hybrid: bool = True 
     ):
         """
         Main prefetch orchestrator - runs all prefetch stages.
@@ -278,7 +278,7 @@ class StartupPrefetchService:
             
             logger.info(f"\n✅ STAGE 1.5 COMPLETE! Created: {created:,}, Updated: {updated:,}")
             
-            # ✅ POPRAWKA: Wyczyść dane z pamięci po zapisaniu
+   
             self._categorized_data = None 
             logger.info(f"   ✅ Zwolniono pamięć RAM (self._categorized_data)\n")
 
@@ -310,7 +310,7 @@ class StartupPrefetchService:
         logger.info("="*80)
         logger.info(f"💷 Workers: {max_workers} parallel downloads\n")
         
-        # ✅ POPRAWKA 3: Dodano kategorie NPC
+     
         VISUAL_CATEGORIES = [
             'planets', 'weapons', 'armor', 'vehicles', 'droids', 'items',
             'characters', 'species', 'creatures'
@@ -326,12 +326,12 @@ class StartupPrefetchService:
             for category in VISUAL_CATEGORIES:
                 logger.info(f"   🎯 {category.upper()}")
                 
-                # ✅ POPRAWKA 1: Użyj hybrid_service.pg_cache
-                # ✅ POPRAWKA 2: Usuń 'limit'
+           
+           
                 articles = hybrid_service.pg_cache.get_articles_by_category(
                     universe=universe,
                     category=category
-                    # Usunięto limit, pobierz WSZYSTKIE
+              
                 )
                 
                 to_fetch = [
@@ -342,7 +342,7 @@ class StartupPrefetchService:
                 logger.info(f"      📋 Found {len(articles):,} articles, {len(to_fetch):,} need image download")
                 
                 if not to_fetch:
-                    logger.info(f"      ✅ All images already cached!\n")
+                    logger.info(f"       All images already cached!\n")
                     continue
                 
                 tasks = [(a.title, a.image_url, i + 1, len(to_fetch)) for i, a in enumerate(to_fetch)]
@@ -397,7 +397,7 @@ class StartupPrefetchService:
         self.progress['stage'] = 'complete'
         
         duration = None
-        # ✅ Poprawka: Sprawdź, czy 'completed_at' istnieje przed formatowaniem
+
         if self.progress['started_at'] and self.progress.get('completed_at'):
             try:
                 start = datetime.fromisoformat(self.progress['started_at'])
@@ -471,14 +471,14 @@ async def startup_prefetch_all(
     """
     service = get_prefetch_service()
     
-    # ✅ ZMIANA: Usunięto 'cache_info' i 'file_exists'
-    # Sprawdzamy tylko bazę danych PostgreSQL
+
+ 
     if not force_refresh:
         pg_has_data = False
         db_conn = None
         try:
             db_conn = SessionLocal()
-            # Używamy bezpośrednio PostgresCacheService do sprawdzenia
+           
             pg_stats = PostgresCacheService(db_conn).get_cache_stats(universe)
             pg_has_data = pg_stats and pg_stats.get('total_articles', 0) > 0
         except Exception as e:
@@ -492,9 +492,9 @@ async def startup_prefetch_all(
             logger.info("   ⏩ Skipping full prefetch")
             logger.info("   💡 Use force_refresh=True to refresh\n")
             
-            # Nadal sprawdzaj brakujące obrazy
+          
             if prefetch_images:
-                logger.info("🖼️  Checking for missing images...")
+                logger.info("  Checking for missing images...")
                 hybrid_service = service._init_hybrid_service()
                 if hybrid_service:
                     await service._stage_2_prefetch_images(
@@ -502,11 +502,11 @@ async def startup_prefetch_all(
                         image_workers,
                         hybrid_service
                     )
-                    service._close_hybrid_service() # ✅ Poprawiono: wywołanie funkcji ()
+                    service._close_hybrid_service() 
             
             return
     
-    # Uruchom pełny prefetch
+    
     await service.prefetch_all(
         universe=universe,
         force_refresh=force_refresh,

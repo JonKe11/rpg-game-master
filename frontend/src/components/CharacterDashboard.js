@@ -84,51 +84,56 @@ function CharacterDashboard({ user, onStartSession }) {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {characters.map((character) => (
-              <div key={character.id} className="bg-gray-800 rounded-lg p-6 hover:shadow-xl transition duration-200">
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="text-xl font-bold text-blue-400">{character.name}</h3>
-                  <span className="bg-blue-600 px-2 py-1 rounded text-sm">Lvl {character.level}</span>
-                </div>
-                
-                <div className="space-y-2 text-sm text-gray-300">
-                  <p>Universe: <span className="capitalize">{character.universe.replace('_', ' ')}</span></p>
-                  <p>Race: {character.race}</p>
-                  <p>Class: {character.class_type}</p>
-                </div>
+  {characters.map((character) => (
+    <div key={character.id} className="bg-gray-800 rounded-lg p-6 hover:shadow-xl transition duration-200">
+      <div className="flex justify-between items-start mb-4">
+        <h3 className="text-xl font-bold text-blue-400">{character.name}</h3>
+        <span className="bg-blue-600 px-2 py-1 rounded text-sm">Lvl {character.level}</span>
+      </div>
+      
+      <div className="space-y-2 text-sm text-gray-300">
+        <p>Universe: <span className="capitalize">{character.universe.replace('_', ' ')}</span></p>
+        <p>Race: {character.race}</p>
+        <p>Class: {character.class_type}</p>
+      </div>
 
-                <div className="mt-4 flex gap-2">
-                  <button 
-                    onClick={() => handleShowDetails(character)}
-                    className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm"
-                  >
-                    Details
-                  </button>
+      <div className="mt-4 flex gap-2">
+        <button 
+          onClick={() => handleShowDetails(character)}
+          className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition duration-200"
+        >
+          Details
+        </button>
 
-                  <div className="relative group">
-                    <button className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm">
-                      🎮 Start Session ▼
-                    </button>
-                    
-                    <div className="hidden group-hover:block absolute left-0 mt-1 w-48 bg-gray-800 rounded-lg shadow-xl z-10 border border-gray-700">
-                      <button
-                        onClick={() => onStartSession(character, 'ai')}
-                        className="w-full text-left px-4 py-2 hover:bg-gray-700 rounded-t-lg text-sm"
-                      >
-                        🤖 AI Game Master
-                      </button>
-                      <button
-                        onClick={() => onStartSession(character, 'multiplayer')}
-                        className="w-full text-left px-4 py-2 hover:bg-gray-700 rounded-b-lg text-sm"
-                      >
-                        👥 Multiplayer
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
+        {/* ✅ POPRAWIONY DROPDOWN (Fix "hover tunnel") */}
+        <div className="relative group">
+          <button className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition duration-200">
+            🎮 Start Session ▼
+          </button>
+          
+          {/* Wrapper z paddingiem (pt-1) działający jak most */}
+          <div className="hidden group-hover:block absolute left-0 top-full pt-1 w-48 z-50">
+            {/* Właściwe pudełko z menu */}
+            <div className="bg-gray-800 rounded-lg shadow-xl border border-gray-700 overflow-hidden">
+              <button
+                onClick={() => onStartSession(character, 'ai')}
+                className="w-full text-left px-4 py-2 hover:bg-gray-700 transition text-sm border-b border-gray-700"
+              >
+                🤖 AI Game Master
+              </button>
+              <button
+                onClick={() => onStartSession(character, 'multiplayer')}
+                className="w-full text-left px-4 py-2 hover:bg-gray-700 transition text-sm"
+              >
+                👥 Multiplayer
+              </button>
+            </div>
           </div>
+        </div>
+      </div>
+    </div>
+  ))}
+</div>
         )}
       </div>
 

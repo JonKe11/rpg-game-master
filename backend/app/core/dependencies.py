@@ -15,7 +15,7 @@ except ImportError:
 
 from app.core.config import get_settings
 from app.models.database import SessionLocal
-from app.core.ai.adaptive_game_master import AdaptiveGameMaster
+from app.core.ai.agent_game_master import AgentGameMaster
 from app.services.session_storage import SessionStorage
 
 settings = get_settings()
@@ -31,8 +31,8 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 @lru_cache()
-def get_game_master() -> AdaptiveGameMaster:
-    return AdaptiveGameMaster(model_name=settings.ollama_model)
+def get_game_master() -> AgentGameMaster:
+    return AgentGameMaster(model_name=settings.ollama_model)
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -79,7 +79,7 @@ def get_session_storage() -> SessionStorage:
     return session_storage_instance  # ✅ POPRAWIONE
 
 def get_game_master_service(
-    game_master: AdaptiveGameMaster = Depends(get_game_master),
+    game_master: AgentGameMaster = Depends(get_game_master),
     storage: SessionStorage = Depends(get_session_storage)  # ✅ POPRAWIONE
 ):
     from app.services.game_master_service import GameMasterService

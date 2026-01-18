@@ -16,16 +16,23 @@ class Character(Base):
     description = Column(Text)
     backstory = Column(Text)
     
+    # ✅ NOWE POLA: Życie i Pancerz
+    hp = Column(Integer, default=100)
+    max_hp = Column(Integer, default=100)
+    armor_class = Column(Integer, default=10)
+    damage_reduction = Column(Integer, default=0)   # ✅ NOWE: Pancerz redukujący obrażenia
     # Star Wars specific
     homeworld = Column(String)
     born_year = Column(Integer)
     born_era = Column(String)
     gender = Column(String)
-    height = Column(Float)
-    mass = Column(Float)
     skin_color = Column(String)
     eye_color = Column(String)
     hair_color = Column(String)
+    age = Column(Integer)             # Dodano wiek
+    gender = Column(String)
+    height = Column(Float, nullable=True)       # Wzrost
+    mass = Column(Float, nullable=True)         # Waga# Męska/Żeńska/Inna
     
     # KOTOR attributes (d20 system)
     strength = Column(Integer, default=10)

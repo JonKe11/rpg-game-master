@@ -35,6 +35,9 @@ class CampaignResponse(BaseModel):
     max_players: int
     created_at: datetime
     
+    # ✅ NOWE: Lista zespawnowanych NPC (dla Combat Trackera)
+    spawned_npcs: List[Dict[str, Any]] = []
+    
     class Config:
         from_attributes = True
 
@@ -56,7 +59,12 @@ class MessageSend(BaseModel):
     message_type: str  # "gm_narration", "player_action", etc.
     content: str
     character_id: Optional[int] = None
-    message_metadata: Dict[str, Any] = {}  # ✅ NOWE
+    message_metadata: Dict[str, Any] = {}
+
+class MessageUpdate(BaseModel):
+    """Do aktualizacji istniejącej wiadomości (np. zmiana tury w walce)"""
+    content: Optional[str] = None
+    message_metadata: Optional[Dict[str, Any]] = None
 
 class MessageResponse(BaseModel):
     id: int
@@ -64,7 +72,7 @@ class MessageResponse(BaseModel):
     character_id: Optional[int]
     message_type: str
     content: str
-    message_metadata: Dict[str, Any]  # ✅ NOWE
+    message_metadata: Dict[str, Any]
     timestamp: datetime
     
     class Config:
@@ -81,5 +89,5 @@ class WSMessage(BaseModel):
     user_id: Optional[int] = None
     username: Optional[str] = None
     character_id: Optional[int] = None
-    message_metadata: Dict[str, Any] = {}  # ✅ NOWE
+    message_metadata: Dict[str, Any] = {}
     timestamp: Optional[str] = None

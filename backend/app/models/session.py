@@ -9,20 +9,24 @@ class GameSession(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     universe = Column(String, nullable=False)
-    status = Column(String, default="active")  # active, paused, completed
+    status = Column(String, default="active")
     
-    # Historia i stan gry
-    story_context = Column(Text)  # kontekst fabularny
-    chat_history = Column(JSON, default=[])  # historia rozmów
-    world_state = Column(JSON, default={})  # stan świata gry
+    # --- NOWE POLA DLA AGENTA ---
+    # Kontener na ustrukturyzowany stan (Lokacja, NPC, Questy)
+    # Przykład: {"current_location": "Tatooine", "npcs": [{"name": "Watto", "attitude": "hostile"}]}
+    game_state = Column(JSON, default={}) 
     
-    # Relacje
+    # Lista kluczowych faktów (Pamięć długotrwała/Skompresowana historia)
+    # Przykład: ["Gracze ukradli statek.", "Imperium szuka Jedi na Tatooine."]
+    session_facts = Column(JSON, default=[])
+    
+    # Surowa historia czatu (Pamięć krótkotrwała - bufor)
+    chat_history = Column(JSON, default=[]) 
+    
+    # --- RESZTA BEZ ZMIAN ---
     game_master_id = Column(Integer, ForeignKey("users.id"))
     game_master = relationship("User", back_populates="game_sessions")
-    
-    # Uczestnicy sesji (jako JSON z ID postaci)
     participants = Column(JSON, default=[])
-    
     is_public = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

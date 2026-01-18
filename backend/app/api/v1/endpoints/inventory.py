@@ -1,4 +1,4 @@
-# backend/app/api/v1/inventory.py
+# backend/app/api/v1/endpoints/inventory.py
 """
 Inventory API Endpoints
 
@@ -71,7 +71,6 @@ async def get_campaign_players(
 ):
     """
     Get list of players in campaign with inventory counts.
-    
     Available to all participants (GM and players).
     """
     campaign = get_campaign_or_404(campaign_id, db)
@@ -124,7 +123,6 @@ async def get_player_inventory(
 ):
     """
     Get player's inventory.
-    
     Players can view their own inventory.
     GM can view any player's inventory.
     """
@@ -162,10 +160,11 @@ async def get_player_inventory(
             character_name = character.name
     
     # Get inventory items
+    # Sortujemy: najpierw wyposażone, potem po dacie dodania
     items = db.query(PlayerInventory).filter(
         PlayerInventory.campaign_id == campaign_id,
         PlayerInventory.user_id == user_id
-    ).order_by(PlayerInventory.added_at.desc()).all()
+    ).order_by(PlayerInventory.is_equipped.desc(), PlayerInventory.added_at.desc()).all()
     
     # Calculate stats
     total_items = sum(item.quantity for item in items)
@@ -194,7 +193,6 @@ async def add_item_to_player(
 ):
     """
     Add item to player's inventory.
-    
     Only GM can add items.
     """
     campaign = get_campaign_or_404(campaign_id, db)
@@ -208,16 +206,31 @@ async def add_item_to_player(
     participant = next((p for p in participants if p.get('user_id') == request.player_user_id), None)
     character_id = participant.get('character_id') if participant else None
     
-    # Check if item already exists (to update quantity instead of creating duplicate)
+    # Check if item already exists
     existing_item = db.query(PlayerInventory).filter(
         PlayerInventory.campaign_id == campaign_id,
         PlayerInventory.user_id == request.player_user_id,
         PlayerInventory.item_name == request.item_name
     ).first()
     
+    # Pobieramy nowe wartości z requestu
+    new_slot = getattr(request, 'slot', 'item')
+    new_dice_config = getattr(request, 'dice_config', None)
+    new_rarity = getattr(request, 'item_rarity', 'common')
+
     if existing_item:
-        # Update quantity
+        # ✅ FIX: Jeśli przedmiot istnieje, zaktualizuj jego metadane (Slot/Kości)!
         existing_item.quantity += request.quantity
+        existing_item.slot = new_slot 
+        existing_item.dice_config = new_dice_config
+        existing_item.item_rarity = new_rarity
+        existing_item.stat_modifiers = request.stat_modifiers or {}
+        
+        if request.item_description:
+            existing_item.item_description = request.item_description
+        if request.item_image_url:
+            existing_item.item_image_url = request.item_image_url
+        
         db.commit()
         db.refresh(existing_item)
         return InventoryItemResponse.from_orm(existing_item)
@@ -231,6 +244,12 @@ async def add_item_to_player(
         item_category=request.item_category,
         item_image_url=request.item_image_url,
         item_description=request.item_description,
+        item_rarity=new_rarity,
+        # ✅ NOWE POLA
+        slot=new_slot,
+        dice_config=new_dice_config,
+        is_equipped=False,
+        # ---
         quantity=request.quantity,
         added_by_gm_id=current_user.id,
         notes=request.notes,
@@ -244,6 +263,65 @@ async def add_item_to_player(
     return InventoryItemResponse.from_orm(new_item)
 
 
+@router.post("/campaigns/{campaign_id}/inventory/{item_id}/toggle_equip")
+async def toggle_equip_item(
+    campaign_id: int,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Toggle equipped status of an item.
+    Enforces slot limits (1 weapon, 1 armor, 4 accessories).
+    """
+    item = db.query(PlayerInventory).filter(
+        PlayerInventory.id == item_id, 
+        PlayerInventory.campaign_id == campaign_id
+    ).first()
+    
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    # Weryfikacja uprawnień (właściciel lub GM)
+    if item.user_id != current_user.id:
+        campaign = get_campaign_or_404(campaign_id, db)
+        if campaign.game_master_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not your item")
+
+    if item.slot == 'item':
+        raise HTTPException(status_code=400, detail="This item cannot be equipped")
+
+    if item.is_equipped:
+        # Zdejmij
+        item.is_equipped = False
+    else:
+        # Spróbuj założyć (sprawdź limity)
+        user_items = db.query(PlayerInventory).filter(
+            PlayerInventory.campaign_id == campaign_id,
+            PlayerInventory.user_id == item.user_id,
+            PlayerInventory.is_equipped == True
+        ).all()
+
+        if item.slot == 'weapon':
+            # Zdejmij inną broń
+            for i in user_items:
+                if i.slot == 'weapon': i.is_equipped = False
+        elif item.slot == 'armor':
+            # Zdejmij inną zbroję
+            for i in user_items:
+                if i.slot == 'armor': i.is_equipped = False
+        elif item.slot == 'accessory':
+            # Max 4 akcesoria
+            acc_count = sum(1 for i in user_items if i.slot == 'accessory')
+            if acc_count >= 4:
+                raise HTTPException(status_code=400, detail="You can only equip 4 accessories.")
+        
+        item.is_equipped = True
+
+    db.commit()
+    return {"message": "Equip status toggled", "is_equipped": item.is_equipped}
+
+
 @router.patch("/campaigns/{campaign_id}/inventory/{item_id}", response_model=InventoryItemResponse)
 async def update_inventory_item(
     campaign_id: int,
@@ -254,7 +332,6 @@ async def update_inventory_item(
 ):
     """
     Update inventory item (quantity or notes).
-    
     Only GM can update items.
     """
     campaign = get_campaign_or_404(campaign_id, db)
@@ -274,7 +351,6 @@ async def update_inventory_item(
     # Update fields
     if update_data.quantity is not None:
         if update_data.quantity == 0:
-            # If quantity is 0, delete the item
             db.delete(item)
             db.commit()
             raise HTTPException(
@@ -285,6 +361,9 @@ async def update_inventory_item(
     
     if update_data.notes is not None:
         item.notes = update_data.notes
+        
+    if update_data.is_equipped is not None:
+        item.is_equipped = update_data.is_equipped
     
     db.commit()
     db.refresh(item)
@@ -299,11 +378,7 @@ async def delete_inventory_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Delete inventory item.
-    
-    Only GM can delete items.
-    """
+    """Delete inventory item."""
     campaign = get_campaign_or_404(campaign_id, db)
     check_is_gm(campaign, current_user)
     
@@ -331,16 +406,10 @@ async def get_player_character(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get player's character sheet.
-    
-    GM can view any player's character.
-    Players can view their own character.
-    """
+    """Get player's character sheet."""
     campaign = get_campaign_or_404(campaign_id, db)
     check_is_participant(campaign, current_user.id)
     
-    # Check permissions
     is_gm = campaign.game_master_id == current_user.id
     is_own_character = user_id == current_user.id
     
@@ -350,7 +419,6 @@ async def get_player_character(
             detail="Only GM can view other players' characters"
         )
     
-    # Get character_id from participants
     participants = campaign.participants or []
     participant = next((p for p in participants if p.get('user_id') == user_id), None)
     
@@ -369,14 +437,23 @@ async def get_player_character(
             detail="Character not found"
         )
     
-    # Return character data (adjust based on your Character model)
     return {
         'id': character.id,
         'name': character.name,
         'race': character.race,
         'class_type': character.class_type,
         'level': getattr(character, 'level', 1),
+        'hp': getattr(character, 'hp', 100),
+        'max_hp': getattr(character, 'max_hp', 100),
+        'armor_class': getattr(character, 'armor_class', 10),
         'background': getattr(character, 'background', ''),
+        
+        # ✅ FIX: Dodano brakujące pola
+        'backstory': getattr(character, 'backstory', ''),
+        'description': getattr(character, 'description', ''),
+        'age': getattr(character, 'age', None),
+        'gender': getattr(character, 'gender', None),
+        
         'attributes': {
             'strength': getattr(character, 'strength', 10),
             'dexterity': getattr(character, 'dexterity', 10),
@@ -385,15 +462,16 @@ async def get_player_character(
             'wisdom': getattr(character, 'wisdom', 10),
             'charisma': getattr(character, 'charisma', 10),
         },
+        # ✅ FIX: Poprawiono nazwy pól (dodano skill_)
         'skills': {
-            'computer_use': getattr(character, 'computer_use', 0),
-            'demolitions': getattr(character, 'demolitions', 0),
-            'stealth': getattr(character, 'stealth', 0),
-            'awareness': getattr(character, 'awareness', 0),
-            'persuade': getattr(character, 'persuade', 0),
-            'repair': getattr(character, 'repair', 0),
-            'security': getattr(character, 'security', 0),
-            'treat_injury': getattr(character, 'treat_injury', 0),
+            'computer_use': getattr(character, 'skill_computer_use', 0),
+            'demolitions': getattr(character, 'skill_demolitions', 0),
+            'stealth': getattr(character, 'skill_stealth', 0),
+            'awareness': getattr(character, 'skill_awareness', 0),
+            'persuade': getattr(character, 'skill_persuade', 0),
+            'repair': getattr(character, 'skill_repair', 0),
+            'security': getattr(character, 'skill_security', 0),
+            'treat_injury': getattr(character, 'skill_treat_injury', 0),
         },
         'homeworld': getattr(character, 'homeworld', None),
         'universe': getattr(character, 'universe', 'star_wars'),

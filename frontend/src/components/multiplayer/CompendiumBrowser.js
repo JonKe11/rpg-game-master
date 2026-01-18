@@ -3,15 +3,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api/axiosConfig';
 import { wikiCache } from '../../utils/wikiCache';
 
-// Kategorie, dla których mamy działające endpointy "with-images"
 const COMPENDIUM_CATEGORIES = [
-    { key: 'planets', name: 'Planets', endpoint: '/wiki/locations/planets', dataKey: 'planets' },
-    { key: 'weapons', name: 'Weapons', endpoint: '/wiki/items/category/weapons/with-images', dataKey: 'items' },
-    { key: 'armor', name: 'Armor', endpoint: '/wiki/items/category/armor/with-images', dataKey: 'items' },
-    { key: 'items', name: 'Items', endpoint: '/wiki/items/category/items/with-images', dataKey: 'items' },
-    { key: 'vehicles', name: 'Vehicles', endpoint: '/wiki/items/category/vehicles/with-images', dataKey: 'items' },
-    { key: 'droids', name: 'Droids', endpoint: '/wiki/items/category/droids/with-images', dataKey: 'items' },
-    // TODO: Dodać endpointy dla 'characters' i 'species', gdy będą gotowe
+    { key: 'planets', name: 'Planets', categoryParam: 'planets' },
+    { key: 'weapons', name: 'Weapons', categoryParam: 'weapons' },
+    { key: 'armor', name: 'Armor', categoryParam: 'armor' },
+    { key: 'items', name: 'Items', categoryParam: 'items' },
+    { key: 'vehicles', name: 'Vehicles', categoryParam: 'vehicles' },
+    { key: 'droids', name: 'Droids', categoryParam: 'droids' },
 ];
 
 function CompendiumBrowser({ universe = 'star_wars' }) {
@@ -40,15 +38,17 @@ function CompendiumBrowser({ universe = 'star_wars' }) {
                 return;
             }
             
-            const response = await api.get(selectedCategory.endpoint, {
+            const response = await api.get('/wiki/search', {
                 params: {
                     universe: universe,
+                    category: selectedCategory.categoryParam,
+                    q: search || undefined,
                     limit: 50,
-                    search: search || undefined
+                    with_images: false 
                 }
             });
             
-            const itemsData = response.data[selectedCategory.dataKey] || [];
+            const itemsData = response.data.items || [];
             setItems(itemsData);
             wikiCache.set(universe, cacheKey, itemsData);
             
@@ -63,27 +63,21 @@ function CompendiumBrowser({ universe = 'star_wars' }) {
         loadItems();
     }, [loadItems]);
 
-    // Funkcja otwierająca link do wiki
     const handleArticleSelect = async (item) => {
-        // Nazwy planet są w 'name', nazwy przedmiotów też...
         const title = item.name || item.title;
-        
-        // Kategoria planet to 'planets', dla reszty to 'key'
-        const categorySlug = selectedCategory.key;
-        
-        try {
-            // Użyj endpointu 'get_article_by_title', który na pewno zwraca 'source_url'
-            const response = await api.get(`/wiki/${universe}/${categorySlug}/${encodeURIComponent(title)}`);
-            const sourceUrl = response.data.source_url;
-            
-            if (sourceUrl) {
-                window.open(sourceUrl, '_blank');
-            } else {
-                alert('Source URL not found for this article.');
+        if (item.source_url) {
+            window.open(item.source_url, '_blank');
+        } else {
+            try {
+                const response = await api.get(`/wiki/${universe}/${selectedCategory.key}/${encodeURIComponent(title)}`);
+                if (response.data.source_url) {
+                    window.open(response.data.source_url, '_blank');
+                } else {
+                    alert('No source URL available');
+                }
+            } catch (e) {
+                console.error(e);
             }
-        } catch (error) {
-            console.error('Failed to get article details:', error);
-            alert('Could not retrieve article URL.');
         }
     };
 
@@ -91,8 +85,7 @@ function CompendiumBrowser({ universe = 'star_wars' }) {
         <div className="bg-gray-800 rounded-lg p-6 h-full flex flex-col">
             <h3 className="text-2xl font-bold text-white mb-6">📚 Compendium</h3>
 
-            {/* Przyciski kategorii */}
-            <div className="flex gap-2 mb-6 overflow-x-auto">
+            <div className="flex gap-2 mb-6 overflow-x-auto custom-scrollbar pb-2">
                 {COMPENDIUM_CATEGORIES.map((cat) => (
                     <button
                         key={cat.key}
@@ -106,7 +99,6 @@ function CompendiumBrowser({ universe = 'star_wars' }) {
                 ))}
             </div>
 
-            {/* Wyszukiwarka */}
             <div className="mb-6">
                 <input
                     type="text"
@@ -117,7 +109,6 @@ function CompendiumBrowser({ universe = 'star_wars' }) {
                 />
             </div>
 
-            {/* Siatka z wynikami */}
             {loading ? (
                 <div className="text-center py-12 flex-1">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
@@ -128,27 +119,29 @@ function CompendiumBrowser({ universe = 'star_wars' }) {
                     <div className="text-gray-400">No {selectedCategory.name} found.</div>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto flex-1">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto flex-1 custom-scrollbar pr-2">
                     {items.map((item) => (
                         <div
                             key={item.name || item.title}
                             onClick={() => handleArticleSelect(item)}
-                            className="bg-gray-700 hover:bg-gray-600 rounded-lg p-4 cursor-pointer transition hover:scale-105"
+                            className="bg-gray-700 hover:bg-gray-600 rounded-lg p-3 cursor-pointer transition hover:scale-105 flex flex-col h-full border border-gray-600"
                         >
-                            <img
-                                src={getProxiedImageUrl(item.image_url)}
-                                alt={item.name || item.title}
-                                className="w-full h-24 object-cover rounded mb-2"
-                                crossOrigin="anonymous"
-                                onError={(e) => {
-                                    e.target.style.display = 'none';
-                                    e.target.nextSibling.style.display = 'flex';
-                                }}
-                            />
-                            <div className="w-full h-24 bg-gray-600 rounded mb-2 items-center justify-center" style={{ display: 'none' }}>
-                                <span className="text-gray-400 text-3xl">📚</span>
+                            {/* ✅ ZMIANA: object-contain + tło + większa wysokość */}
+                            <div className="w-full h-32 bg-black rounded mb-2 flex items-center justify-center overflow-hidden border border-gray-800">
+                                {item.image_url ? (
+                                    <img
+                                        src={getProxiedImageUrl(item.image_url)}
+                                        alt={item.name}
+                                        className="w-full h-full object-contain"
+                                        crossOrigin="anonymous"
+                                        onError={(e) => e.target.style.display = 'none'}
+                                    />
+                                ) : (
+                                    <span className="text-gray-600 text-3xl">📷</span>
+                                )}
                             </div>
-                            <h4 className="text-white font-semibold text-sm">
+                            
+                            <h4 className="text-white font-semibold text-sm mt-auto text-center">
                                 {item.name || item.title}
                             </h4>
                         </div>

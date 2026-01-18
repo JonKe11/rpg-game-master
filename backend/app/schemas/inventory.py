@@ -7,7 +7,7 @@ Pydantic models for player inventory validation and serialization.
 
 from pydantic import BaseModel, Field
 from typing import Optional
-from typing import Optional, Dict # ✅ Dodaj Dict
+from typing import Optional, Dict, Any # ✅ Dodaj Dict
 from datetime import datetime
 
 
@@ -19,8 +19,15 @@ class InventoryItemBase(BaseModel):
     item_description: Optional[str] = Field(None, max_length=1000)
     quantity: int = Field(default=1, ge=1, le=999)
     notes: Optional[str] = Field(None, max_length=500)
+    # ✅ NOWE POLE
+    item_rarity: str = Field(default="common")
     stat_modifiers: Optional[Dict[str, int]] = Field(default_factory=dict)
-
+    # ✅ NOWE POLA
+    slot: Optional[str] = Field(default="item") # weapon, armor, accessory, item
+    dice_config: Optional[Dict[str, Any]] = None # {count: 3, sides: 12}
+    # ✅ NOWE POLE
+    armor_value: int = 0
+    is_equipped: bool = False
 class InventoryItemCreate(InventoryItemBase):
     """Schema for creating new inventory item"""
     user_id: int = Field(..., description="ID of player receiving the item")
@@ -31,7 +38,7 @@ class InventoryItemUpdate(BaseModel):
     """Schema for updating inventory item"""
     quantity: Optional[int] = Field(None, ge=0, le=999)
     notes: Optional[str] = Field(None, max_length=500)
-
+    is_equipped: Optional[bool] = None # Pozwala na zmianę statusu wyposażenia
 
 class InventoryItemResponse(InventoryItemBase):
     """Schema for inventory item response"""
@@ -77,4 +84,12 @@ class AddItemToPlayerRequest(BaseModel):
     item_description: Optional[str] = Field(None, max_length=1000)
     quantity: int = Field(default=1, ge=1, le=999)
     notes: Optional[str] = None
+
+    item_rarity: str = Field(default="common")
     stat_modifiers: Optional[Dict[str, int]] = Field(default_factory=dict)
+    
+   
+    slot: str = "item"
+    dice_config: Optional[Dict[str, Any]] = None
+
+    armor_value: int = 0

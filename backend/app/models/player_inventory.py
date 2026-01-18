@@ -6,7 +6,7 @@ Tracks items that players have in their inventory during campaigns.
 Only players (not GM) have inventory.
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, JSON # ✅ Dodano JSON
@@ -39,7 +39,8 @@ class PlayerInventory(Base):
     item_category = Column(String(50), nullable=False)  # weapons, armor, items, vehicles, droids
     item_image_url = Column(String(500), nullable=True)
     item_description = Column(String(1000), nullable=True)
-    
+    # ✅ NOWE POLE
+    item_rarity = Column(String, default="common")
     # Quantity and metadata
     quantity = Column(Integer, default=1, nullable=False)
     # Przechowuje np. {"strength": 2, "dexterity": -1, "ac": 5}
@@ -47,7 +48,12 @@ class PlayerInventory(Base):
     added_by_gm_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     added_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     notes = Column(String(500), nullable=True)  # GM can add notes
-    
+    # ✅ NOWE POLA: Mechanika RPG
+    is_equipped = Column(Boolean, default=False)
+    slot = Column(String(50), default="item") # weapon, armor, accessory, item
+    dice_config = Column(JSON, nullable=True) # np. {"count": 3, "sides": 12}
+    # ✅ NOWE: Wartość pancerza przedmiotu (dla przedmiotów typu 'armor')
+    armor_value = Column(Integer, default=0)
     # Relationships
     # ✅ POPRAWKA 2: Zmieniono "Campaign" na "MultiplayerCampaign"
     campaign = relationship("MultiplayerCampaign", back_populates="inventory_items")

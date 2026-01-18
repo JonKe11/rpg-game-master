@@ -4,6 +4,7 @@ import api from '../../api/axiosConfig';
 
 function CreateCampaign({ character, onCampaignCreated, onCancel }) {
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState(''); // ✅ Nowy stan
   const [universe, setUniverse] = useState(character.universe || 'star_wars');
   const [isPublic, setIsPublic] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -20,9 +21,10 @@ function CreateCampaign({ character, onCampaignCreated, onCancel }) {
 
     try {
       // 1. Create campaign
-      console.log('🔄 Creating campaign:', { title, universe, isPublic });
+      console.log('🔄 Creating campaign:', { title, description, universe, isPublic });
       const response = await api.post('/multiplayer/campaigns/create', {
         title: title,
+        description: description, // ✅ Wysyłamy opis
         universe: universe,
         is_public: isPublic
       });
@@ -30,27 +32,21 @@ function CreateCampaign({ character, onCampaignCreated, onCancel }) {
 
       // 2. Join own campaign
       try {
-        console.log('🔄 Joining campaign:', response.data.campaign_id, 'with character:', character.id);
-        const joinResponse = await api.post(
+        await api.post(
           `/multiplayer/campaigns/${response.data.campaign_id}/join`,
           { character_id: character.id }
         );
-        console.log('✅ Joined campaign:', joinResponse.data);
       } catch (joinError) {
-        console.error('❌ Join error:', joinError.response?.data || joinError);
-        alert(`Campaign created but failed to join: ${joinError.response?.data?.detail || joinError.message}`);
-        setCreating(false);
-        return; // Don't continue if join failed
+        console.error('❌ Join error:', joinError);
+        // Kontynuujemy nawet przy błędzie dołączenia, żeby pokazać lobby
       }
 
       // 3. Fetch full campaign data
-      console.log('🔄 Fetching campaign data...');
       const campaignData = await api.get(`/multiplayer/campaigns/${response.data.campaign_id}`);
-      console.log('✅ Campaign data:', campaignData.data);
-      
       onCampaignCreated(campaignData.data);
+
     } catch (error) {
-      console.error('❌ Create error:', error.response?.data || error);
+      console.error('❌ Create error:', error);
       alert(`Failed to create campaign: ${error.response?.data?.detail || error.message}`);
       setCreating(false);
     }
@@ -60,7 +56,9 @@ function CreateCampaign({ character, onCampaignCreated, onCancel }) {
     <div className="max-w-2xl mx-auto">
       <h3 className="text-2xl font-bold text-white mb-6">Create New Campaign</h3>
 
-      <form onSubmit={handleCreate} className="bg-gray-800 rounded-lg p-6 space-y-4">
+      <form onSubmit={handleCreate} className="bg-gray-800 rounded-lg p-6 space-y-4 shadow-xl border border-gray-700">
+        
+        {/* Title */}
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
             Campaign Title
@@ -69,12 +67,28 @@ function CreateCampaign({ character, onCampaignCreated, onCancel }) {
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g., The Tatooine Heist"
-            className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600"
             required
+            maxLength={60}
           />
         </div>
 
+        {/* ✅ Description Field */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Brief Description (Optional)
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows="3"
+            className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600 resize-none"
+            maxLength={200}
+          />
+          <p className="text-xs text-gray-500 text-right mt-1">{description.length}/200</p>
+        </div>
+
+        {/* Universe */}
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
             Universe
@@ -82,7 +96,7 @@ function CreateCampaign({ character, onCampaignCreated, onCancel }) {
           <select
             value={universe}
             onChange={(e) => setUniverse(e.target.value)}
-            className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600"
           >
             <option value="star_wars">Star Wars</option>
             <option value="lotr">Lord of the Rings</option>
@@ -91,32 +105,35 @@ function CreateCampaign({ character, onCampaignCreated, onCancel }) {
           </select>
         </div>
 
-        <div className="flex items-center">
+        {/* Visibility */}
+        <div className="flex items-center bg-gray-700/30 p-3 rounded-lg border border-gray-600">
           <input
             type="checkbox"
             id="isPublic"
             checked={isPublic}
             onChange={(e) => setIsPublic(e.target.checked)}
-            className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
+            className="w-5 h-5 text-blue-600 bg-gray-700 border-gray-500 rounded focus:ring-blue-500 cursor-pointer"
           />
-          <label htmlFor="isPublic" className="ml-2 text-sm text-gray-300">
-            Public (anyone can join)
+          <label htmlFor="isPublic" className="ml-3 text-sm text-gray-200 cursor-pointer select-none">
+            <span className="font-bold block">Public Campaign</span>
+            <span className="text-gray-400 text-xs">Anyone on the server can see and join this lobby.</span>
           </label>
         </div>
 
+        {/* Buttons */}
         <div className="pt-4 flex gap-3">
           <button
             type="submit"
             disabled={creating}
-            className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition"
+            className="flex-1 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 disabled:from-gray-600 disabled:to-gray-600 text-white px-6 py-3 rounded-lg font-bold transition shadow-lg"
           >
-            {creating ? 'Creating...' : 'Create Campaign'}
+            {creating ? 'Creating Lobby...' : '🚀 Create & Join'}
           </button>
           <button
             type="button"
             onClick={onCancel}
             disabled={creating}
-            className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-500 px-6 py-3 rounded-lg font-semibold transition"
+            className="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 text-gray-300 px-6 py-3 rounded-lg font-semibold transition border border-gray-600"
           >
             Cancel
           </button>

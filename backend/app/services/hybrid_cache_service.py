@@ -1,18 +1,13 @@
 # backend/app/services/hybrid_cache_service.py
-"""
-Hybrid Cache Service - Best of both worlds!
 
-✅ WERSJA 3.0 - Używa wyłącznie PostgresCacheService i przekazuje paginację.
-Usuwa logikę rezerwową (fallback) do plików, ponieważ nie jest już potrzebna.
-"""
 
 from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
 import logging
-from datetime import datetime # ✅ DODAJ TEN IMPORT
+from datetime import datetime 
 from app.services.postgres_cache_service import PostgresCacheService
 from app.core.scraper.image_fetcher import ImageFetcher
-from app.models.wiki_article import WikiArticle # Potrzebne do typowania
+from app.models.wiki_article import WikiArticle 
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +27,7 @@ class HybridCacheService:
         self.image_fetcher = ImageFetcher()
     
     # ============================================
-    # ✅ GŁÓWNA ZMODYFIKOWANA FUNKCJA
+    # GŁÓWNA ZMODYFIKOWANA FUNKCJA
     # ============================================
     
     def get_category_with_metadata(
@@ -49,7 +44,7 @@ class HybridCacheService:
         To jest teraz główna funkcja do pobierania danych dla frontendu.
         """
         
-        # Użyj nowej, potężnej funkcji wyszukiwania z postgres_cache_service
+        
         search_result = self.pg_cache.search_articles_paginated(
             universe=universe,
             category=category,
@@ -62,7 +57,7 @@ class HybridCacheService:
         articles = search_result['items']
         total_count = search_result['total_count']
         
-        # Format results
+        
         items = [
             {
                 'id': article.id,
@@ -70,7 +65,7 @@ class HybridCacheService:
                 'description': article.content.get('description') if article.content else None,
                 'image_url': article.image_url,
                 'image_cached': article.image_cached,
-                'source_url': article.source_url # ✅ Przekaż source_url
+                'source_url': article.source_url 
             }
             for article in articles
         ]
@@ -94,7 +89,7 @@ class HybridCacheService:
         universe: str,
         limit: Optional[int] = None,
         offset: int = 0,
-        ensure_images: bool = False # Ten parametr jest teraz mniej istotny
+        ensure_images: bool = False 
     ) -> List[Dict]:
         """
         Pobiera planety z metadanymi z PostgreSQL.
@@ -112,7 +107,7 @@ class HybridCacheService:
         self,
         universe: str,
         query: str,
-        limit: int = 10 # Mniejszy limit dla wyszukiwania ogólnego
+        limit: int = 10 
     ) -> Dict[str, List[Dict]]:
         """
         Przeszukuje wszystkie kategorie (używa nowej funkcji).
@@ -124,7 +119,7 @@ class HybridCacheService:
         ]
         
         for category in categories:
-            # Użyj nowej funkcji z paginacją
+            
             search_result = self.pg_cache.search_articles_paginated(
                 universe=universe,
                 category=category,
@@ -189,7 +184,7 @@ class HybridCacheService:
             if article.image_url:
                 cache_path = self.image_fetcher.get_cache_path(article.image_url)
                 if cache_path.exists():
-                    # ✅ FIX: Przekaż 'title' i 'universe' zamiast 'id'
+                    
                     self.pg_cache.mark_image_cached(
                         article.title,
                         article.universe,
@@ -204,7 +199,7 @@ class HybridCacheService:
                             size_bytes=cache_path.stat().st_size
                         )
                     except Exception:
-                        pass # Ignoruj błędy duplikatów
+                        pass 
         
         logger.info(f"✅ Image prefetch complete: {stats}")
         return stats
