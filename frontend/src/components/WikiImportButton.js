@@ -10,7 +10,7 @@ function WikiImportButton({ universe, onImport }) {
   const [characterData, setCharacterData] = useState(null);
   const [error, setError] = useState(null);
 
-  // ✅ NOWA FUNKCJA: Wyszukiwanie
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
 
@@ -20,12 +20,12 @@ function WikiImportButton({ universe, onImport }) {
     setSearchResults([]);
 
     try {
-      // ✅ NOWY ENDPOINT: /wiki/{universe}/search
+    
       const searchResponse = await api.get(`/wiki/${universe}/search`, {
         params: { 
           q: searchQuery,
           limit: 10,
-          category: 'characters'  // Szukaj tylko postaci
+          category: 'characters' 
         }
       });
 
@@ -37,7 +37,7 @@ function WikiImportButton({ universe, onImport }) {
 
       setSearchResults(searchResponse.data.results);
       
-      // Jeśli tylko 1 wynik - od razu go pobierz
+
       if (searchResponse.data.results.length === 1) {
         await fetchCharacterDetails(searchResponse.data.results[0]);
       }
@@ -50,15 +50,15 @@ function WikiImportButton({ universe, onImport }) {
     }
   };
 
-  // ✅ NOWA FUNKCJA: Pobierz szczegóły postaci
+
   const fetchCharacterDetails = async (result) => {
     try {
-      // ✅ NOWY ENDPOINT: /wiki/{universe}/{category}/{title}
+
       const response = await api.get(
         `/wiki/${universe}/${result.category}/${result.title}`
       );
 
-      // ✅ MAPOWANIE: Backend → Frontend format
+
       const mappedData = {
         name: response.data.title,
         description: response.data.content.description || '',
@@ -79,7 +79,7 @@ function WikiImportButton({ universe, onImport }) {
       };
 
       setCharacterData(mappedData);
-      setSearchResults([]);  // Ukryj listę wyników
+      setSearchResults([]);  
       
     } catch (err) {
       console.error('Wiki fetch error:', err);
@@ -198,7 +198,7 @@ function WikiImportButton({ universe, onImport }) {
               </div>
             )}
 
-            {/* ✅ NOWE: Lista wyników wyszukiwania */}
+            {/* Lista wyników wyszukiwania */}
             {searchResults.length > 0 && (
               <div className="mb-4">
                 <h4 className="text-lg font-semibold mb-2">Search Results:</h4>

@@ -1,4 +1,4 @@
-# backend/app/core/exceptions.py
+
 from typing import Any, Optional
 
 class AppException(Exception):

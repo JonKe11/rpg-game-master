@@ -1,4 +1,4 @@
-# backend/app/schemas/campaign.py
+
 """
 Pydantic schemas dla Campaign API
 """
@@ -9,7 +9,7 @@ class CampaignStartRequest(BaseModel):
     """Request do rozpoczęcia kampanii"""
     character_id: int
     title: Optional[str] = None
-    campaign_length: str = "medium"  # short, medium, long
+    campaign_length: str = "medium"  
     
     class Config:
         schema_extra = {

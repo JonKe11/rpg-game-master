@@ -1,11 +1,11 @@
-# backend/app/schemas/multiplayer.py
+
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-# ============================================================================
-# CAMPAIGN SCHEMAS
-# ============================================================================
+
+
+
 
 class CampaignCreate(BaseModel):
     title: str
@@ -19,7 +19,7 @@ class ParticipantInfo(BaseModel):
     user_id: int
     username: str
     character_id: int
-    role: str  # "gm" or "player"
+    role: str  
     joined_at: str
 
 class CampaignResponse(BaseModel):
@@ -35,7 +35,7 @@ class CampaignResponse(BaseModel):
     max_players: int
     created_at: datetime
     
-    # ✅ NOWE: Lista zespawnowanych NPC (dla Combat Trackera)
+    
     spawned_npcs: List[Dict[str, Any]] = []
     
     class Config:
@@ -51,12 +51,12 @@ class CampaignListItem(BaseModel):
     has_gm: bool
     created_at: datetime
 
-# ============================================================================
-# MESSAGE SCHEMAS
-# ============================================================================
+
+
+
 
 class MessageSend(BaseModel):
-    message_type: str  # "gm_narration", "player_action", etc.
+    message_type: str  
     content: str
     character_id: Optional[int] = None
     message_metadata: Dict[str, Any] = {}
@@ -78,13 +78,13 @@ class MessageResponse(BaseModel):
     class Config:
         from_attributes = True
 
-# ============================================================================
-# WEBSOCKET MESSAGE SCHEMAS
-# ============================================================================
+
+
+
 
 class WSMessage(BaseModel):
     """WebSocket message format"""
-    type: str  # "message", "system", "dice_roll", etc.
+    type: str  
     content: str
     user_id: Optional[int] = None
     username: Optional[str] = None

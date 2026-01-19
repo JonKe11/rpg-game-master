@@ -1,4 +1,4 @@
-# backend/app/core/wiki/rate_limiter.py
+
 """
 Advanced rate limiter with token bucket algorithm.
 
@@ -25,7 +25,7 @@ class RateLimiter:
         
         async def make_request():
             await limiter.acquire()
-            # Make request
+            
     """
     
     def __init__(self, calls: int, period: int):
@@ -38,14 +38,14 @@ class RateLimiter:
         """
         self.calls = calls
         self.period = period
-        self.rate = calls / period  # Tokens per second
+        self.rate = calls / period  
         
-        # Token bucket
+        
         self.tokens = float(calls)
         self.max_tokens = float(calls)
         self.last_refill = time.monotonic()
         
-        # Lock for thread safety
+        
         self._lock = asyncio.Lock()
     
     async def acquire(self, tokens: float = 1.0):
@@ -56,18 +56,18 @@ class RateLimiter:
             tokens: Number of tokens to acquire (default: 1.0)
         """
         async with self._lock:
-            # Refill tokens based on time elapsed
+            
             now = time.monotonic()
             elapsed = now - self.last_refill
             
-            # Add tokens based on time elapsed
+            
             self.tokens = min(
                 self.max_tokens,
                 self.tokens + elapsed * self.rate
             )
             self.last_refill = now
             
-            # Wait if not enough tokens
+            
             if self.tokens < tokens:
                 wait_time = (tokens - self.tokens) / self.rate
                 await asyncio.sleep(wait_time)

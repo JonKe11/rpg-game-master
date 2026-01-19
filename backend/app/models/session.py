@@ -11,19 +11,19 @@ class GameSession(Base):
     universe = Column(String, nullable=False)
     status = Column(String, default="active")
     
-    # --- NOWE POLA DLA AGENTA ---
-    # Kontener na ustrukturyzowany stan (Lokacja, NPC, Questy)
-    # Przykład: {"current_location": "Tatooine", "npcs": [{"name": "Watto", "attitude": "hostile"}]}
+    
+    
+    
     game_state = Column(JSON, default={}) 
     
-    # Lista kluczowych faktów (Pamięć długotrwała/Skompresowana historia)
-    # Przykład: ["Gracze ukradli statek.", "Imperium szuka Jedi na Tatooine."]
+    
+    
     session_facts = Column(JSON, default=[])
     
-    # Surowa historia czatu (Pamięć krótkotrwała - bufor)
+    
     chat_history = Column(JSON, default=[]) 
     
-    # --- RESZTA BEZ ZMIAN ---
+    
     game_master_id = Column(Integer, ForeignKey("users.id"))
     game_master = relationship("User", back_populates="game_sessions")
     participants = Column(JSON, default=[])

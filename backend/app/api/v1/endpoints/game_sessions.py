@@ -1,4 +1,4 @@
-# backend/app/api/v1/endpoints/game_sessions.py
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
@@ -24,14 +24,14 @@ async def start_game_session(
     Rozpoczyna nową sesję z Agentem AI (Stateful RAG Agent).
     Tworzy sesję w bazie i generuje wprowadzenie fabularne.
     """
-    # 1. Pobierz dane postaci
+    
     char_repo = CharacterRepository(db)
     character = char_repo.get(request.character_id)
     
     if not character:
         raise HTTPException(status_code=404, detail="Character not found")
     
-    # 2. Utwórz sesję w bazie danych
+    
     session_repo = SessionRepository(db)
     session = session_repo.create(
         title=request.title or f"Przygoda: {character.name}",
@@ -46,13 +46,13 @@ async def start_game_session(
         }]
     )
     
-    # 3. Inicjalizacja Serwisu GM (Nowa architektura)
-    # Serwis sam inicjalizuje wewnątrz AgentGameMaster i PostgresCacheService
+    
+    
     gm_service = GameMasterService(db)
     
     try:
-        # 4. Wygeneruj intro (Symulujemy polecenie systemowe dla Agenta)
-        # Agent przeanalizuje stan, biografię (jeśli jest w bazie) i wiki.
+        
+        
         intro_prompt = (
             "[SYSTEM]: Rozpocznij nową przygodę. "
             f"Postać gracza: {character.name} (Rasa: {character.race}, Klasa: {character.class_type}). "
@@ -60,7 +60,7 @@ async def start_game_session(
             "Zakończ pytaniem co gracz chce zrobić."
         )
         
-        # Wywołujemy processing jako użytkownik 'System' aby nadać kontekst
+        
         intro_response = gm_service.process_player_input(
             session_id=session.id,
             user_input=intro_prompt,
@@ -93,11 +93,11 @@ async def start_campaign_session(
     Uruchamia tryb kampanii. W nowej architekturze RAG Agent obsługuje
     zarówno "zwykłe" sesje jak i kampanie w ten sam, stanowy sposób.
     """
-    # Mapujemy request kampanii na request sesji, zachowując spójność
+    
     session_request = StartSessionRequest(
         character_id=request.character_id,
         title=request.title,
-        universe="star_wars"  # Domyślnie, lub można pobrać z postaci wewnątrz start_game_session
+        universe="star_wars"  
     )
     return await start_game_session(session_request, db, current_user)
 
@@ -114,7 +114,7 @@ async def process_action(
     gm_service = GameMasterService(db)
     
     try:
-        print(f"➡️ Processing action for session {request.session_id}: {request.action}") # DEBUG
+        print(f"➡️ Processing action for session {request.session_id}: {request.action}") 
         
         response_data = gm_service.process_player_input(
             session_id=request.session_id,
@@ -138,11 +138,11 @@ async def process_action(
         )
         
     except ValueError as e:
-        # ✅ ZMIANA: Logujemy dokładny błąd przed rzuceniem 404
+        
         print(f"❌ ValueError in process_action: {e}")
         import traceback
         traceback.print_exc()
-        # Jeśli błąd to "Session not found", to faktycznie 404. W przeciwnym razie to błąd serwera (500)
+        
         if "Session not found" in str(e):
             raise HTTPException(status_code=404, detail="Session not found")
         else:

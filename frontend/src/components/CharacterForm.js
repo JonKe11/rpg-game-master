@@ -13,7 +13,7 @@ function CharacterForm({ onClose, onNext, onSearchWiki }) {
         class_type: '',
         level: 1,
         description: '',
-        // ✅ NOWE POLA FIZYCZNE (Domyślne wartości)
+
         age: '',
         gender: '',
         eye_color: '',
@@ -42,9 +42,9 @@ function CharacterForm({ onClose, onNext, onSearchWiki }) {
         e.preventDefault();
         const dataToSubmit = {
             ...formData,
-            // Zapewniamy kompatybilność pola rasy niezależnie od nazwy (species/race)
+   
             race: formData.species || formData.race,
-            // Konwersja wieku na liczbę (jeśli podano)
+  
             age: formData.age ? parseInt(formData.age) : null
         };
         onNext(dataToSubmit);
@@ -101,7 +101,7 @@ function CharacterForm({ onClose, onNext, onSearchWiki }) {
                         </div>
                     </div>
 
-                    {/* --- Sekcja 2: Cechy Fizyczne (NOWOŚĆ) --- */}
+                    {/* --- Sekcja 2: Cechy Fizyczne --- */}
                     <div className="bg-gray-700/30 p-4 rounded-lg border border-gray-700">
                         <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                             🧬 Physical Traits

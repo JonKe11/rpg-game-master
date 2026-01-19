@@ -6,7 +6,7 @@ import AuthPage from './components/Auth/AuthPage';
 import GameSession from './components/GameSession';
 import MultiplayerLobby from './components/multiplayer/MultiplayerLobby';
 
-// ✅ Nowe importy
+
 import CharacterDashboard from './components/CharacterDashboard';
 import ProfilePage from './components/profile/ProfilePage';
 
@@ -57,7 +57,7 @@ function App() {
   
   if (!user) return <AuthPage onAuthSuccess={setUser} />;
 
-  // 🎮 Widok Gry (Ma priorytet)
+
   if (activeGameSession) {
     if (gameMode === 'ai') {
         return <GameSession character={activeGameSession} onClose={handleCloseGameSession} />;
@@ -65,7 +65,7 @@ function App() {
     return <MultiplayerLobby character={activeGameSession} onClose={handleCloseGameSession} />;
   }
 
-  // 🏠 Główny Layout
+
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Navbar */}

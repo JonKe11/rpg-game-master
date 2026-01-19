@@ -1,4 +1,4 @@
-# backend/app/core/wiki/base_wiki_client.py
+
 """
 Base class for all wiki API clients.
 
@@ -35,7 +35,7 @@ class BaseWikiClient:
     ✅ CONCRETE IMPLEMENTATION with smart categorization + MediaWiki API.
     """
     
-    # ✅ Category keywords for automatic classification (EXPANDED!)
+    
     CATEGORY_KEYWORDS = {
         'characters': [
             'Individuals', 'Characters', 'Humans', 'Males', 'Females',
@@ -124,7 +124,7 @@ class BaseWikiClient:
         self.config = config
         self.base_url = config.base_url
         
-        # Rate limiter (default values if not in config)
+        
         rate_limit_calls = getattr(config, 'rate_limit_calls', 150)
         rate_limit_period = getattr(config, 'rate_limit_period', 60)
         
@@ -133,10 +133,10 @@ class BaseWikiClient:
             period=rate_limit_period
         )
         
-        # Session (reuse for connection pooling)
+        
         self._session: Optional[aiohttp.ClientSession] = None
         
-        # Stats
+        
         self.stats = {
             'requests_made': 0,
             'requests_failed': 0,
@@ -173,9 +173,9 @@ class BaseWikiClient:
             await self._session.close()
             self._session = None
             await asyncio.sleep(0.50)
-    # ============================================
-    # CONCRETE METHODS
-    # ============================================
+    
+    
+    
     
     def get_category_mapping(self) -> Dict[str, str]:
         """
@@ -184,7 +184,7 @@ class BaseWikiClient:
         Returns:
             Dict mapping category names
         """
-        # Default mapping (can be overridden in subclasses)
+        
         return {
             'planets': 'Planets',
             'species': 'Species',
@@ -199,7 +199,7 @@ class BaseWikiClient:
             'battles': 'Battles',
             'creatures': 'Creatures',
             'technology': 'Technology',
-            'media': 'Media'  # ✅ NEW
+            'media': 'Media'  
         }
     
     def validate_entity(self, entity_name: str, entity_type: str) -> bool:
@@ -213,8 +213,8 @@ class BaseWikiClient:
         Returns:
             True if valid
         """
-        # Default: assume valid
-        # Subclasses can override for stricter validation
+        
+        
         return True
     
     def get_fallback_entity(self, entity_type: str) -> str:
@@ -227,7 +227,7 @@ class BaseWikiClient:
         Returns:
             Safe fallback entity name
         """
-        # Default fallbacks
+        
         fallbacks = {
             'planet': 'Earth',
             'species': 'Human',
@@ -237,9 +237,9 @@ class BaseWikiClient:
         }
         return fallbacks.get(entity_type, 'Unknown')
     
-    # ============================================
-    # CORE API METHODS
-    # ============================================
+    
+    
+    
     
     async def _make_request(
         self, 
@@ -260,21 +260,21 @@ class BaseWikiClient:
         """
         await self._ensure_session()
         
-        # ✅ FIX: Determine correct base URL based on endpoint
+        
         base_url = self.base_url
         
-        # FANDOM API endpoints need /api/v1, not /wiki
-        # Added /Search check here
+        
+        
         if endpoint.startswith('/Articles') or endpoint.startswith('/Search'):
-            # This is a FANDOM API endpoint
+            
             if 'fandom.com' in base_url:
-                # Extract domain and add /api/v1
+                
                 domain = base_url.split('/api')[0].split('/wiki')[0]
                 base_url = f"{domain}/api/v1"
         
         url = f"{base_url}{endpoint}"
         
-        # Rate limiting
+        
         await self.rate_limiter.acquire()
         
         try:
@@ -289,15 +289,15 @@ class BaseWikiClient:
             logger.error(f"Request failed for {self.config.name}: {e}")
             raise
 
-    # ============================================
-    # ✅ NEW: REQUIRED METHODS FOR SCRAPER
-    # ============================================
+    
+    
+    
 
     async def search(self, query: str, limit: int = 1) -> List[Dict]:
         """
         Search for articles using MediaWiki API (more reliable than Fandom API).
         """
-        # Build api.php URL
+        
         if 'fandom.com' in self.base_url:
             domain_parts = self.base_url.split('/api')[0].split('/wiki')[0]
             base_url = f"{domain_parts}/api.php"
@@ -327,7 +327,7 @@ class BaseWikiClient:
                         results.append({
                             'id': item['pageid'],
                             'title': item['title'],
-                            # Prosty URL wiki
+                            
                             'url': f"{self.base_url.split('/api')[0]}/wiki/{item['title'].replace(' ', '_')}" 
                         })
                 return results
@@ -347,8 +347,8 @@ class BaseWikiClient:
             Object with .title, .content, .image_url, .url attributes
         """
         try:
-            # 1. Resolve ID from title (using our search method)
-            # This is necessary because /Articles/Details typically needs an ID
+            
+            
             search_results = await self.search(title, limit=1)
             
             if not search_results:
@@ -356,15 +356,15 @@ class BaseWikiClient:
                 
             article_id = search_results[0]['id']
             
-            # 2. Fetch details using ID
+            
             details_dict = await self.get_article_details_batch([article_id])
             data = details_dict.get(str(article_id))
             
             if not data:
                 return None
 
-            # 3. Wrap in a simple object to satisfy ScraperService (dot notation)
-            # ScraperService expects: details.title, details.content, details.image_url
+            
+            
             result = SimpleNamespace()
             result.title = data.get('title', title)
             result.content = data.get('abstract', '')
@@ -377,9 +377,9 @@ class BaseWikiClient:
             logger.error(f"Failed to get details for '{title}': {e}")
             return None
     
-    # ============================================
-    # ✅ NEW: MEDIAWIKI API METHODS
-    # ============================================
+    
+    
+    
     
     async def get_category_members_mediawiki(
         self,
@@ -402,13 +402,13 @@ class BaseWikiClient:
         Returns:
             Dict with 'members' list and 'continue' token
         """
-        # ✅ FIX: Construct MediaWiki API URL properly
+        
         if 'fandom.com' in self.base_url:
-            # For FANDOM wikis: https://WIKI.fandom.com/api.php
+            
             domain_parts = self.base_url.split('/api')[0].split('/wiki')[0]
             base_url = f"{domain_parts}/api.php"
         else:
-            # Generic fallback
+            
             base_url = self.base_url.replace('/api/v1', '/api.php')
         
         params = {
@@ -416,7 +416,7 @@ class BaseWikiClient:
             'list': 'categorymembers',
             'cmtitle': f'Category:{category}',
             'cmlimit': min(limit, 500),
-            'cmtype': 'page',  # Only pages, not subcategories
+            'cmtype': 'page',  
             'format': 'json'
         }
         
@@ -439,10 +439,10 @@ class BaseWikiClient:
                         members.append({
                             'id': item['pageid'],
                             'title': item['title'],
-                            'ns': item['ns']  # namespace
+                            'ns': item['ns']  
                         })
                 
-                # Get continuation token
+                
                 continue_token = None
                 if 'continue' in data:
                     continue_token = data['continue'].get('cmcontinue')
@@ -494,22 +494,22 @@ class BaseWikiClient:
             
             all_members.extend(members)
             
-            # Progress log
+            
             if len(all_members) % 5000 == 0:
                 logger.info(f"   Progress: {len(all_members):,} articles...")
             
-            # Check for continuation
+            
             continue_token = result.get('continue')
             if not continue_token:
-                break  # No more pages
+                break  
         
         logger.info(f"📦 Total articles in {category}: {len(all_members):,}")
         
         return all_members[:max_total]
     
-    # ============================================
-    # CATEGORY OPERATIONS (FANDOM API with fallback)
-    # ============================================
+    
+    
+    
     
     async def get_category_articles(
         self, 
@@ -573,12 +573,12 @@ class BaseWikiClient:
         """
         all_articles = []
         offset = 0
-        batch_size = 5000  # API max per request
+        batch_size = 5000  
         
         logger.info(f"📦 Fetching ALL from category: {category}")
         logger.info(f"   Max total: {max_total:,}")
         
-        # Try FANDOM API first
+        
         try:
             logger.debug("   Trying FANDOM API...")
             
@@ -590,16 +590,16 @@ class BaseWikiClient:
                 )
                 
                 if not batch:
-                    break  # No more articles
+                    break  
                 
                 all_articles.extend(batch)
                 offset += len(batch)
                 
-                # Progress log every 10k
+                
                 if len(all_articles) % 10000 == 0:
                     logger.info(f"   Progress: {len(all_articles):,} articles...")
                 
-                # Check if we got less than requested (last page)
+                
                 if len(batch) < batch_size:
                     break
             
@@ -610,7 +610,7 @@ class BaseWikiClient:
             logger.warning(f"   ⚠️ FANDOM API failed: {e}")
             logger.info(f"   🔄 Falling back to MediaWiki API...")
             
-            # ✅ FALLBACK: Use MediaWiki API
+            
             all_articles = await self.get_all_category_members_mediawiki(
                 category,
                 max_total=max_total
@@ -623,9 +623,9 @@ class BaseWikiClient:
         
         return all_articles[:max_total]
     
-    # ============================================
-    # ARTICLE CATEGORIES FETCHING
-    # ============================================
+    
+    
+    
     
     async def get_article_categories(self, article_id: int) -> List[str]:
         """
@@ -645,23 +645,23 @@ class BaseWikiClient:
                 params={"ids": str(article_id)}
             )
             
-            # Response structure: {"items": {article_id: {... categories: [...]}}}
+            
             items = response.get("items", {})
             article_data = items.get(str(article_id), {})
             
-            # Extract category names
+            
             categories_list = article_data.get("categories", [])
             
-            # Categories come as list of dicts: [{"title": "Category:Individuals"}, ...]
+            
             category_names = []
             for cat in categories_list:
                 cat_title = cat.get("title", "")
-                # Remove "Category:" prefix
+                
                 if cat_title.startswith("Category:"):
-                    cat_title = cat_title[9:]  # Remove "Category:"
-                # Remove "Canon_" prefix if present
+                    cat_title = cat_title[9:]  
+                
                 if cat_title.startswith("Canon_"):
-                    cat_title = cat_title[6:]  # Remove "Canon_"
+                    cat_title = cat_title[6:]  
                 
                 if cat_title:
                     category_names.append(cat_title)
@@ -689,10 +689,10 @@ class BaseWikiClient:
         """
         all_categories = {}
         
-        # MediaWiki API supports max 50 pages per request
+        
         batch_size = 50
         
-        # Split into smaller batches
+        
         batches = [
             article_ids[i:i + batch_size]
             for i in range(0, len(article_ids), batch_size)
@@ -701,7 +701,7 @@ class BaseWikiClient:
         for batch in batches:
             ids_str = "|".join(map(str, batch))
             
-            # MediaWiki API URL
+            
             if 'fandom.com' in self.base_url:
                 domain_parts = self.base_url.split('/api')[0].split('/wiki')[0]
                 base_url = f"{domain_parts}/api.php"
@@ -712,8 +712,8 @@ class BaseWikiClient:
                 'action': 'query',
                 'pageids': ids_str,
                 'prop': 'categories',
-                'cllimit': 500,  # Max categories per page
-                'clshow': '!hidden',  # Exclude hidden categories
+                'cllimit': 500,  
+                'clshow': '!hidden',  
                 'format': 'json'
             }
             
@@ -732,35 +732,35 @@ class BaseWikiClient:
                     for page_id_str, page_data in pages.items():
                         page_id = int(page_id_str)
                         
-                        # Extract categories
+                        
                         categories_list = page_data.get('categories', [])
                         category_names = []
                         
                         for cat in categories_list:
                             cat_title = cat.get('title', '')
-                            # Remove "Category:" prefix
+                            
                             if cat_title.startswith('Category:'):
                                 cat_title = cat_title[9:]
-                            # Remove "Canon_" prefix if present
+                            
                             if cat_title.startswith('Canon_'):
                                 cat_title = cat_title[6:]
                             
-                            if cat_title and cat_title != 'articles':  # Skip "Canon articles"
+                            if cat_title and cat_title != 'articles':  
                                 category_names.append(cat_title)
                         
                         all_categories[page_id] = category_names
             
             except Exception as e:
                 logger.warning(f"MediaWiki categories batch failed: {e}")
-                # Fill with empty lists
+                
                 for article_id in batch:
                     all_categories[article_id] = []
         
         return all_categories
     
-    # ============================================
-    # SMART CATEGORIZATION
-    # ============================================
+    
+    
+    
     
     def categorize_article(self, article_categories: List[str]) -> Optional[str]:
         """
@@ -778,10 +778,10 @@ class BaseWikiClient:
         if not article_categories:
             return None
         
-        # Convert to lowercase for matching
+        
         categories_lower = [cat.lower() for cat in article_categories]
         
-        # Score each frontend category
+        
         scores = {}
         for frontend_cat, keywords in self.CATEGORY_KEYWORDS.items():
             score = 0
@@ -794,7 +794,7 @@ class BaseWikiClient:
             if score > 0:
                 scores[frontend_cat] = score
         
-        # Return category with highest score
+        
         if scores:
             best_category = max(scores.items(), key=lambda x: x[1])[0]
             return best_category
@@ -831,15 +831,15 @@ class BaseWikiClient:
         logger.info(f"Total articles to categorize: {len(articles):,}")
         logger.info(f"Max concurrent workers: {max_workers}")
         
-        # Initialize result buckets
+        
         categorized = {cat: [] for cat in self.CATEGORY_KEYWORDS.keys()}
         uncategorized = []
         
-        # Extract article IDs
+        
         article_ids = [a['id'] for a in articles]
         
-        # Split into batches for concurrent processing
-        batch_size = 100  # API limit
+        
+        batch_size = 100  
         batches = [
             article_ids[i:i + batch_size]
             for i in range(0, len(article_ids), batch_size)
@@ -847,18 +847,18 @@ class BaseWikiClient:
         
         logger.info(f"📦 Processing {len(batches)} batches of {batch_size} articles...")
         
-        # Process batches with concurrency limit
+        
         semaphore = asyncio.Semaphore(max_workers)
         
         async def process_batch(batch):
             async with semaphore:
                 return await self.get_categories_batch(batch)
         
-        # Execute all batches
+        
         tasks = [process_batch(batch) for batch in batches]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        # Merge all categories
+        
         all_article_categories = {}
         for result in results:
             if isinstance(result, Exception):
@@ -868,26 +868,26 @@ class BaseWikiClient:
         
         logger.info(f"✅ Fetched categories for {len(all_article_categories):,} articles")
         
-        # Now categorize each article
+        
         logger.info(f"\n🔍 Categorizing articles...")
         
         for article in articles:
             article_id = article['id']
             article_cats = all_article_categories.get(article_id, [])
             
-            # Determine category
+            
             frontend_cat = self.categorize_article(article_cats)
             
-            # Add to appropriate bucket
+            
             if frontend_cat:
                 categorized[frontend_cat].append({
                     'id': article_id,
                     'title': article['title'],
                     'url': article.get('url', ''),
-                    'categories': article_cats  # Keep original categories
+                    'categories': article_cats  
                 })
             else:
-                # Couldn't categorize
+                
                 uncategorized.append({
                     'id': article_id,
                     'title': article['title'],
@@ -895,7 +895,7 @@ class BaseWikiClient:
                     'categories': article_cats
                 })
         
-        # Log results
+        
         logger.info(f"\n📊 CATEGORIZATION RESULTS:")
         logger.info(f"="*60)
         
@@ -912,9 +912,9 @@ class BaseWikiClient:
         
         return categorized
     
-    # ============================================
-    # MAIN ENTRY POINT
-    # ============================================
+    
+    
+    
     
     async def get_all_canonical_data_smart(
         self,
@@ -951,16 +951,16 @@ class BaseWikiClient:
         logger.info(f"Details: {'YES' if with_details else 'NO'}")
         logger.info("="*60)
         
-        # Step 1: Get ALL articles from Canon_articles
+        
         logger.info(f"\n📥 STEP 1/3: Fetching all Canon articles...")
         
-        # ✅ FIX: Use MediaWiki API directly for Canon_articles!
-        # This category doesn't work with FANDOM /Articles/List endpoint
-        canon_category = "Canon_articles"  # Use underscore for MediaWiki API
+        
+        
+        canon_category = "Canon_articles"  
         
         all_articles = await self.get_all_category_members_mediawiki(
             canon_category,
-            max_total=100000  # Up to 100k
+            max_total=100000  
         )
         
         if not all_articles:
@@ -969,7 +969,7 @@ class BaseWikiClient:
         
         logger.info(f"✅ Found {len(all_articles):,} canon articles\n")
         
-        # Step 2: Categorize articles
+        
         logger.info(f"📥 STEP 2/3: Categorizing articles...")
         
         categorized = await self.categorize_articles_smart(
@@ -977,7 +977,7 @@ class BaseWikiClient:
             max_workers=max_workers
         )
         
-        # Step 3: Optionally enrich with details
+        
         if with_details:
             logger.info(f"\n📥 STEP 3/3: Enriching with article details...")
             
@@ -990,15 +990,15 @@ class BaseWikiClient:
                 article_ids = [a['id'] for a in articles]
                 details = await self.get_article_details_batch(article_ids)
                 
-                # Enrich
+                
                 for article in articles:
                     article_id = article['id']
                     detail = details.get(str(article_id), {})
                     
-                    # ✅ Merge full detail dictionary into article
+                    
                     article.update(detail)
                     
-                    # Ensure image_url is set (fallback to thumbnail)
+                    
                     if not article.get('image_url'):
                         article['image_url'] = article.get('thumbnail')
         
@@ -1007,9 +1007,9 @@ class BaseWikiClient:
         
         return categorized
     
-    # ============================================
-    # BATCH OPERATIONS
-    # ============================================
+    
+    
+    
     
     async def get_article_details_batch(
         self, 
@@ -1030,7 +1030,7 @@ class BaseWikiClient:
         max_batch_size = getattr(self.config, 'max_batch_size', 100)
         batch_size = max_batch_size
         
-        # Split into batches
+        
         batches = [
             article_ids[i:i + batch_size]
             for i in range(0, len(article_ids), batch_size)
@@ -1041,7 +1041,7 @@ class BaseWikiClient:
             f"in {len(batches)} batches..."
         )
         
-        # Process batches concurrently
+        
         tasks = [
             self._fetch_details_batch(batch)
             for batch in batches
@@ -1049,7 +1049,7 @@ class BaseWikiClient:
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        # Merge results
+        
         for result in results:
             if isinstance(result, Exception):
                 logger.error(f"Batch failed: {result}")
@@ -1076,9 +1076,9 @@ class BaseWikiClient:
             logger.error(f"Failed to fetch details batch: {e}")
             return {}
     
-    # ============================================
-    # UTILITY METHODS
-    # ============================================
+    
+    
+    
     
     def get_stats(self) -> Dict:
         """Get client statistics"""
@@ -1088,9 +1088,9 @@ class BaseWikiClient:
             'available_tokens': self.rate_limiter.available_tokens
         }
     
-    # ============================================
-    # LEGACY COMPATIBILITY
-    # ============================================
+    
+    
+    
     
     async def get_all_canonical_data(
         self,
@@ -1107,7 +1107,7 @@ class BaseWikiClient:
             with_details=with_details
         )
         
-        # Convert to old format (just titles)
+        
         result = {}
         for cat_name, articles in categorized.items():
             result[cat_name] = [a['title'] for a in articles]
@@ -1128,7 +1128,7 @@ class BaseWikiClient:
             f"Consider using get_all_canonical_data_smart() instead!"
         )
         
-        # Use old method (fetches from specific category)
+        
         category_mapping = self.get_category_mapping()
         wiki_category = category_mapping.get(frontend_category)
         
@@ -1143,7 +1143,7 @@ class BaseWikiClient:
             f"🎯 Fetching {frontend_category} from {self.config.name}..."
         )
         
-        # Get article list
+        
         articles = await self.get_all_category_articles(
             wiki_category, 
             max_total=limit
@@ -1152,12 +1152,12 @@ class BaseWikiClient:
         if not articles:
             return []
         
-        # Optionally enrich with details
+        
         if with_details:
             article_ids = [item["id"] for item in articles]
             details = await self.get_article_details_batch(article_ids)
             
-            # Enrich
+            
             enriched = []
             for article in articles:
                 article_id = article["id"]
@@ -1181,7 +1181,7 @@ class BaseWikiClient:
             return enriched
         
         else:
-            # Just titles (fast)
+            
             simple = [
                 {
                     'title': article["title"],

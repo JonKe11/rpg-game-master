@@ -1,4 +1,4 @@
-# backend/app/main.py
+
 """
 FastAPI Main Application with Startup Prefetch.
 
@@ -22,13 +22,13 @@ from app.core.exceptions import AppException
 from app.models import Base, engine
 from app.api.v1 import api_router
 
-# ✨ NEW: Import prefetch service
+
 from app.services.startup_prefetch_service import startup_prefetch_all
 
-# ✨ NEW: Import WebSocket manager
+
 from app.websocket import manager
 
-# Setup logging
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
@@ -37,13 +37,13 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-# Initialize database
+
 Base.metadata.create_all(bind=engine)
 
 
-# ============================================
-# LIFESPAN CONTEXT MANAGER
-# ============================================
+
+
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
     - Startup: Background prefetch, initialization
     - Shutdown: Cleanup, graceful shutdown
     """
-    # ========== STARTUP ==========
+    
     logger.info("="*60)
     logger.info("🚀 Starting RPG Game Master Backend")
     logger.info("="*60)
@@ -63,17 +63,17 @@ async def lifespan(app: FastAPI):
     logger.info(f"Database: {settings.database_url.split('@')[1] if '@' in settings.database_url else 'local'}")
     logger.info("="*60)
     
-    # ✨ Start background prefetch task
+    
     logger.info("\n🎯 Initiating background prefetch...")
     logger.info("   (API will be available immediately!)\n")
     
-    # ✅ FIX: Use ensure_future instead of create_task for lifespan context
+    
     prefetch_task = asyncio.ensure_future(
         startup_prefetch_all(
             universe='star_wars',
-            force_refresh=False,  # Set to True to always refresh
+            force_refresh=False,  
             prefetch_images=True,
-            image_workers=20  # Parallel image downloads
+            image_workers=20  
         )
     )
     
@@ -81,14 +81,14 @@ async def lifespan(app: FastAPI):
     logger.info("   Docs: http://localhost:8000/docs")
     logger.info("   Prefetch running in background...\n")
     
-    yield  # Application runs here
+    yield  
     
-    # ========== SHUTDOWN ==========
+    
     logger.info("\n" + "="*60)
     logger.info("👋 Shutting down RPG Game Master Backend")
     logger.info("="*60)
     
-    # Cancel prefetch if still running
+    
     if not prefetch_task.done():
         logger.info("⏸️  Cancelling background prefetch...")
         prefetch_task.cancel()
@@ -100,9 +100,9 @@ async def lifespan(app: FastAPI):
     logger.info("✅ Shutdown complete\n")
 
 
-# ============================================
-# FASTAPI APP
-# ============================================
+
+
+
 
 app = FastAPI(
     title=settings.app_name,
@@ -110,14 +110,14 @@ app = FastAPI(
     debug=settings.debug,
     docs_url="/docs",
     redoc_url="/redoc",
-    lifespan=lifespan  # ✨ NEW: Add lifespan
+    lifespan=lifespan  
 )
 
-# ============================================
-# MIDDLEWARE
-# ============================================
 
-# CORS
+
+
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -126,9 +126,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ============================================
-# EXCEPTION HANDLERS
-# ============================================
+
+
+
 
 @app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException):
@@ -142,16 +142,16 @@ async def app_exception_handler(request: Request, exc: AppException):
         }
     )
 
-# ============================================
-# ROUTES
-# ============================================
 
-# Include API routes
+
+
+
+
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(friends.router, prefix="/api/v1/friends", tags=["friends"])
-# ============================================
-# WEBSOCKET
-# ============================================
+
+
+
 
 @app.websocket("/ws/campaign/{campaign_id}")
 async def campaign_websocket(websocket: WebSocket, campaign_id: int):
@@ -166,10 +166,10 @@ async def campaign_websocket(websocket: WebSocket, campaign_id: int):
     
     try:
         while True:
-            # Receive message from client
+            
             data = await websocket.receive_json()
             
-            # Broadcast to all clients in this campaign
+            
             await manager.broadcast(campaign_id, {
                 "type": data.get("type", "message"),
                 "content": data.get("content"),
@@ -181,16 +181,16 @@ async def campaign_websocket(websocket: WebSocket, campaign_id: int):
     except WebSocketDisconnect:
         manager.disconnect(websocket, campaign_id)
         
-        # Notify others that someone left
+        
         await manager.broadcast(campaign_id, {
             "type": "system",
             "content": "A player has disconnected",
             "timestamp": None
         })
 
-# ============================================
-# BASIC ENDPOINTS
-# ============================================
+
+
+
 
 @app.get("/")
 async def root():
@@ -211,7 +211,7 @@ async def health_check():
         "timestamp": asyncio.get_event_loop().time()
     }
 
-# ✨ NEW: Prefetch status endpoint
+
 @app.get("/prefetch/status")
 async def prefetch_status():
     """

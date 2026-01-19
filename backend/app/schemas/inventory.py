@@ -1,4 +1,4 @@
-# backend/app/schemas/inventory.py
+
 """
 Inventory Schemas
 
@@ -7,7 +7,7 @@ Pydantic models for player inventory validation and serialization.
 
 from pydantic import BaseModel, Field
 from typing import Optional
-from typing import Optional, Dict, Any # ✅ Dodaj Dict
+from typing import Optional, Dict, Any 
 from datetime import datetime
 
 
@@ -19,13 +19,13 @@ class InventoryItemBase(BaseModel):
     item_description: Optional[str] = Field(None, max_length=1000)
     quantity: int = Field(default=1, ge=1, le=999)
     notes: Optional[str] = Field(None, max_length=500)
-    # ✅ NOWE POLE
+    
     item_rarity: str = Field(default="common")
     stat_modifiers: Optional[Dict[str, int]] = Field(default_factory=dict)
-    # ✅ NOWE POLA
-    slot: Optional[str] = Field(default="item") # weapon, armor, accessory, item
-    dice_config: Optional[Dict[str, Any]] = None # {count: 3, sides: 12}
-    # ✅ NOWE POLE
+    
+    slot: Optional[str] = Field(default="item") 
+    dice_config: Optional[Dict[str, Any]] = None 
+    
     armor_value: int = 0
     is_equipped: bool = False
 class InventoryItemCreate(InventoryItemBase):
@@ -38,7 +38,7 @@ class InventoryItemUpdate(BaseModel):
     """Schema for updating inventory item"""
     quantity: Optional[int] = Field(None, ge=0, le=999)
     notes: Optional[str] = Field(None, max_length=500)
-    is_equipped: Optional[bool] = None # Pozwala na zmianę statusu wyposażenia
+    is_equipped: Optional[bool] = None 
 
 class InventoryItemResponse(InventoryItemBase):
     """Schema for inventory item response"""

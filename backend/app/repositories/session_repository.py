@@ -1,4 +1,4 @@
-# backend/app/repositories/session_repository.py
+
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from app.repositories.base import BaseRepository
@@ -17,7 +17,7 @@ class SessionRepository(BaseRepository[GameSession]):
     
     def get_by_participant(self, character_id: int) -> List[GameSession]:
         """Pobierz sesje w których uczestniczy postać"""
-        # JSON contains sprawdza czy character_id jest w tablicy participants
+        
         return self.db.query(GameSession).filter(
             GameSession.participants.contains([character_id])
         ).all()

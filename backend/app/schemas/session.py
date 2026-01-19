@@ -1,4 +1,4 @@
-# backend/app/schemas/session.py
+
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -9,7 +9,7 @@ class GameSessionBase(BaseModel):
     is_public: bool = False
 
 class GameSessionCreate(GameSessionBase):
-    participants: List[int] = []  # lista ID postaci
+    participants: List[int] = []  
 
 class GameSessionUpdate(BaseModel):
     title: Optional[str] = None

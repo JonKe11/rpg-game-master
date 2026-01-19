@@ -1,4 +1,4 @@
-# backend/app/models/campaign.py
+
 from sqlalchemy import Column, Integer, String, JSON, DateTime, Boolean, Text, Enum as SQLEnum
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship

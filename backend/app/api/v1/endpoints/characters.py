@@ -1,4 +1,4 @@
-# backend/app/api/v1/endpoints/characters.py
+
 from typing import List, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
@@ -12,7 +12,7 @@ from app.models.user import User
 
 router = APIRouter()
 
-# Model danych wejściowych dla generatora AI
+
 class BioGenRequest(BaseModel):
     name: str
     race: str
@@ -25,7 +25,7 @@ class BioGenRequest(BaseModel):
     skin_color: Optional[str] = None
     eye_color: Optional[str] = None
 
-# ✅ NOWE: Model do szybkiej aktualizacji statystyk
+
 class StatsUpdateRequest(BaseModel):
     hp: Optional[int] = None
     max_hp: Optional[int] = None
@@ -79,11 +79,11 @@ async def get_character(
     if not character:
         raise NotFoundError("Character", character_id)
     
-    # Pozwól GM-owi widzieć postać (jeśli jest w jego kampanii), tutaj uproszczone:
-    # W idealnym świecie sprawdzilibyśmy, czy user jest GM-em kampanii, w której jest ta postać.
-    # Na razie zostawiamy standardowe sprawdzanie, ale endpoint inventory/.. omija to dla GM.
+    
+    
+    
     if character.owner_id != current_user.id:
-         # TODO: Dodać logikę sprawdzania uprawnień GM
+         
          pass 
     
     return character
@@ -104,7 +104,7 @@ async def update_character(
     
     return repo.update(character_id, **updates.dict(exclude_unset=True))
 
-# ✅ NOWY ENDPOINT: Szybka aktualizacja HP/Level (Dla GM i Systemu Walki)
+
 @router.patch("/{character_id}/stats")
 async def update_character_stats(
     character_id: int,
@@ -119,9 +119,9 @@ async def update_character_stats(
     if not character:
         raise NotFoundError("Character", character_id)
     
-    # Tutaj można by dodać sprawdzenie, czy user jest GM-em danej kampanii,
-    # ale dla uproszczenia zakładamy, że jeśli zna ID postaci i jest w sesji, to może to zrobić.
-    # W produkcji należałoby to zabezpieczyć (np. sprawdzić ownership lub GM status w tabeli campaigns).
+    
+    
+    
     
     updates = stats.dict(exclude_unset=True)
     return repo.update(character_id, **updates)

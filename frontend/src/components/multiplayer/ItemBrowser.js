@@ -17,8 +17,7 @@ function ItemBrowser({
     
     const [loading, setLoading] = useState(false);
     const [withImages, setWithImages] = useState(true);
-    
-    // Paginacja
+
     const [offset, setOffset] = useState(0);
     const [total, setTotal] = useState(0);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -35,18 +34,18 @@ function ItemBrowser({
         return originalUrl;
     };
 
-    // Reset przy zmianie kategorii/wyszukiwania
+
     useEffect(() => {
         setItems([]);
         setOffset(0);
         setTotal(0);
         loadItems(true);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+      
     }, [category, debouncedSearch, withImages, universe]);
 
     const loadItems = async (isFresh = false) => {
         const currentOffset = isFresh ? 0 : offset;
-        // Jeśli nie jest to świeże ładowanie i mamy już wszystko, przerwij
+
         if (!isFresh && items.length > 0 && items.length >= total && total !== 0) return;
 
         isFresh ? setLoading(true) : setLoadingMore(true);
@@ -74,7 +73,7 @@ function ItemBrowser({
         }
     };
 
-    // Infinite scroll observer
+
     useEffect(() => {
         const observer = new IntersectionObserver(entries => {
             if (entries[0].isIntersecting && !loading && !loadingMore) {
@@ -129,7 +128,7 @@ function ItemBrowser({
                 ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                         {items.map((item, idx) => {
-                            // Unikalny klucz dla listy
+                          
                             const key = `${item.name}-${idx}`; 
                             return (
                                 <div 
@@ -147,7 +146,7 @@ function ItemBrowser({
                                                 crossOrigin="anonymous" 
                                                 onError={(e) => {
                                                     e.target.style.display = 'none';
-                                                    // Pokaż ikonę zastępczą w razie błędu ładowania
+                                                
                                                     if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
                                                 }} 
                                             />

@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import ItemBrowser from './ItemBrowser';
 
-// Definicja kolorów dla edytora
+
 const RARITY_OPTIONS = [
     { value: 'common', label: 'Common', color: 'text-gray-400' },
     { value: 'uncommon', label: 'Uncommon', color: 'text-green-400' },
@@ -15,7 +15,7 @@ const RARITY_OPTIONS = [
 function ItemEditor({ universe, onSave, onCancel }) {
     const [mode, setMode] = useState('wiki');
     
-    // ✅ Główny stan formularza przedmiotu
+   
     const [formData, setFormData] = useState({
         name: '',
         category: 'items',
@@ -23,14 +23,14 @@ function ItemEditor({ universe, onSave, onCancel }) {
         image_url: '',
         rarity: 'common',
         stat_modifiers: {},
-        // ✅ NOWE POLA
-        slot: 'item', // Domyślnie zwykły przedmiot
+       
+        slot: 'item', 
         dice_config: {
             enabled: false,
             count: 1,
             sides: 6
         },
-        armor_value: 0 // ✅ Dodano wartość pancerza
+        armor_value: 0 
     });
     
     const fileInputRef = useRef(null);
@@ -91,7 +91,7 @@ function ItemEditor({ universe, onSave, onCancel }) {
     const handleSubmit = () => {
         if (!formData.name) return alert('Name required');
         
-        // Formatowanie danych pod backend
+   
         const submissionData = { ...formData };
         
         if (!formData.dice_config.enabled) {
@@ -102,10 +102,10 @@ function ItemEditor({ universe, onSave, onCancel }) {
                 sides: parseInt(formData.dice_config.sides)
             };
         }
-        // Usuwamy flagę 'enabled', bo backend jej nie potrzebuje
+     
         delete submissionData.dice_config?.enabled;
 
-        // ✅ Upewniamy się, że armor_value jest liczbą
+  
         submissionData.armor_value = parseInt(formData.armor_value) || 0;
 
         onSave(submissionData);
@@ -224,7 +224,7 @@ function ItemEditor({ universe, onSave, onCancel }) {
                     </div>
                 )}
 
-                {/* ✅ SEKCJA RZUTU KOŚCIĄ (Damage/Effect) */}
+                {/*  SEKCJA RZUTU KOŚCIĄ (Damage/Effect) */}
                 <div className="bg-gray-900/50 p-3 rounded border border-gray-700">
                     <label className="flex items-center gap-2 mb-2 cursor-pointer select-none">
                         <input 

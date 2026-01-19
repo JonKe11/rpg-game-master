@@ -1,11 +1,11 @@
-# backend/app/core/dependencies.py
+
 from functools import lru_cache
 from typing import Generator
 from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
-# JWT imports with fallback
+
 try:
     import jwt
     InvalidTokenError = jwt.exceptions.InvalidTokenError
@@ -76,11 +76,11 @@ def get_session_repository(db: Session = Depends(get_db)):
 
 def get_session_storage() -> SessionStorage:
     """Return SessionStorage instance (not dict!)"""
-    return session_storage_instance  # ✅ POPRAWIONE
+    return session_storage_instance  
 
 def get_game_master_service(
     game_master: AgentGameMaster = Depends(get_game_master),
-    storage: SessionStorage = Depends(get_session_storage)  # ✅ POPRAWIONE
+    storage: SessionStorage = Depends(get_session_storage)  
 ):
     from app.services.game_master_service import GameMasterService
     return GameMasterService(game_master, storage)

@@ -1,4 +1,4 @@
-# backend/app/api/v1/endpoints/users.py
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict, Any
@@ -25,11 +25,11 @@ async def get_my_profile_full(
 ):
     """Pobiera pełne dane do profilu użytkownika"""
     
-    # 1. Postacie
+    
     characters = db.query(Character).filter(Character.owner_id == current_user.id).all()
     
-    # 2. Kampanie (gdzie jest graczem lub GM)
-    # Tu uproszczona logika - szukamy gdzie jest creator lub w participants JSON
+    
+    
     campaigns = db.query(MultiplayerCampaign).all()
     my_campaigns = []
     for c in campaigns:
@@ -49,7 +49,7 @@ async def get_my_profile_full(
                 "status": c.status.value
             })
 
-    # 3. Statystyki znajomych
+    
     friends_count = db.query(Friendship).filter(
         or_(Friendship.sender_id == current_user.id, Friendship.receiver_id == current_user.id),
         Friendship.status == FriendshipStatus.ACCEPTED

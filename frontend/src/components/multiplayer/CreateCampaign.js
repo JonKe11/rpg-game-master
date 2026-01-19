@@ -1,10 +1,10 @@
-// frontend/src/components/multiplayer/CreateCampaign.js
+
 import React, { useState } from 'react';
 import api from '../../api/axiosConfig';
 
 function CreateCampaign({ character, onCampaignCreated, onCancel }) {
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState(''); // ✅ Nowy stan
+  const [description, setDescription] = useState(''); 
   const [universe, setUniverse] = useState(character.universe || 'star_wars');
   const [isPublic, setIsPublic] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -20,17 +20,17 @@ function CreateCampaign({ character, onCampaignCreated, onCancel }) {
     setCreating(true);
 
     try {
-      // 1. Create campaign
+      
       console.log('🔄 Creating campaign:', { title, description, universe, isPublic });
       const response = await api.post('/multiplayer/campaigns/create', {
         title: title,
-        description: description, // ✅ Wysyłamy opis
+        description: description, 
         universe: universe,
         is_public: isPublic
       });
       console.log('✅ Campaign created:', response.data);
 
-      // 2. Join own campaign
+      
       try {
         await api.post(
           `/multiplayer/campaigns/${response.data.campaign_id}/join`,
@@ -38,10 +38,10 @@ function CreateCampaign({ character, onCampaignCreated, onCancel }) {
         );
       } catch (joinError) {
         console.error('❌ Join error:', joinError);
-        // Kontynuujemy nawet przy błędzie dołączenia, żeby pokazać lobby
+        
       }
 
-      // 3. Fetch full campaign data
+      
       const campaignData = await api.get(`/multiplayer/campaigns/${response.data.campaign_id}`);
       onCampaignCreated(campaignData.data);
 

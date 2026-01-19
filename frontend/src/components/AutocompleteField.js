@@ -1,43 +1,43 @@
-// frontend/src/components/AutocompleteField.js
-// ✅ WERSJA 2.2 - Poprawiona logika 'onChange' i wyszukiwania
+
+
 
 import React, { useState, useEffect, useRef } from 'react';
-import useDebounce from '../hooks/useDebounce'; // ✅ POTRZEBUJEMY TEGO HOOKA
+import useDebounce from '../hooks/useDebounce'; 
 
 function AutocompleteField({ 
   label, 
   value, 
   onChange, 
-  onSearch, // (query) => Promise<string[]>
+  onSearch, 
   placeholder = '',
   required = false,
   clearOnSelect = false
 }) {
-  // 'value' to kanoniczny stan z formularza nadrzędnego (np. formData.species)
-  // 'inputValue' to to, co użytkownik widzi w polu <input>
+  
+  
   const [inputValue, setInputValue] = useState(value || '');
   const [filteredSuggestions, setFilteredSuggestions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const wrapperRef = useRef(null);
 
-  const debouncedSearchTerm = useDebounce(inputValue, 300); // 300ms opóźnienia
+  const debouncedSearchTerm = useDebounce(inputValue, 300); 
 
-  // Synchronizuj inputValue, jeśli 'value' (z nadrzędnego formularza) się zmieni
-  // Np. po wybraniu sugestii
+  
+  
   useEffect(() => {
     if (value !== inputValue) {
         setInputValue(value || '');
     }
-  }, [value]); // ✅ POPRAWKA: Usunięto 'inputValue' z zależności
+  }, [value]); 
 
-  // Efekt wyszukiwania asynchronicznego
+  
   useEffect(() => {
-    // Wyszukaj tylko jeśli:
-    // 1. Jest funkcja onSearch
-    // 2. Użytkownik przestał pisać (debouncedSearchTerm)
-    // 3. Sugestie są widoczne
-    // 4. ✅ POPRAWKA: Usunięto 'debouncedSearchTerm !== value', co blokowało wyszukiwanie
+    
+    
+    
+    
+    
     if (onSearch && debouncedSearchTerm && showSuggestions) {
       setIsLoading(true);
       const fetchSuggestions = async () => {
@@ -49,9 +49,9 @@ function AutocompleteField({
     } else {
       setFilteredSuggestions([]);
     }
-  }, [debouncedSearchTerm, onSearch, showSuggestions]); // ✅ POPRAWKA: Usunięto 'value'
+  }, [debouncedSearchTerm, onSearch, showSuggestions]); 
 
-  // Zamykanie sugestii po kliknięciu poza (bez zmian)
+  
   useEffect(() => {
     function handleClickOutside(event) {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
@@ -64,12 +64,12 @@ function AutocompleteField({
     };
   }, []);
 
-  // ✅ POPRAWKA: handleChange MUSI wywołać onChange
+  
   const handleChange = (e) => {
     const newValue = e.target.value;
-    setInputValue(newValue);     // Zaktualizuj lokalny input
-    onChange(newValue);         // Zaktualizuj stan rodzica (np. formData)
-    setShowSuggestions(true);   // Pokaż sugestie
+    setInputValue(newValue);     
+    onChange(newValue);         
+    setShowSuggestions(true);   
   };
 
   const handleSelect = (suggestion) => {
@@ -78,7 +78,7 @@ function AutocompleteField({
       onChange(''); 
     } else {
       setInputValue(suggestion);
-      onChange(suggestion); // Ustawia wartość w nadrzędnym formularzu
+      onChange(suggestion); 
     }
     setShowSuggestions(false);
   };
@@ -113,7 +113,7 @@ function AutocompleteField({
           {filteredSuggestions.slice(0, 50).map((suggestion, idx) => (
             <div
               key={idx}
-              onMouseDown={(e) => e.preventDefault()} // Zapobiegaj utracie focusu
+              onMouseDown={(e) => e.preventDefault()} 
               onClick={() => handleSelect(suggestion)}
               className="px-3 py-2 hover:bg-blue-600 cursor-pointer border-b border-gray-600 last:border-b-0 text-white"
             >

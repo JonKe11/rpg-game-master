@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import api from '../api/axiosConfig';
 
 function BackstoryStep({ characterData, onBack, onNext }) {
-  const [mode, setMode] = useState('choice'); // 'choice', 'write', 'ai'
+  const [mode, setMode] = useState('choice'); 
   const [backstory, setBackstory] = useState(characterData.backstory || '');
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -11,13 +11,13 @@ function BackstoryStep({ characterData, onBack, onNext }) {
     setIsGenerating(true);
     setMode('ai');
     try {
-      // Wewnątrz handleGenerate w BackstoryStep.js
+   
 const response = await api.post('/characters/generate-bio', {
   name: characterData.name,
   race: characterData.race,
   class_type: characterData.class_type,
   universe: characterData.universe,
-  // ✅ Upewnij się, że te pola są wysyłane:
+
   homeworld: characterData.homeworld,
   affiliation: characterData.affiliation
 });

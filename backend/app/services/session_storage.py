@@ -1,4 +1,4 @@
-# backend/app/services/session_storage.py
+
 """
 Session storage z obsługą Campaign Arc
 Trzyma: session context + campaign structure
@@ -22,15 +22,15 @@ class SessionStorage:
         self.sessions: Dict[int, Dict] = {}
         self.campaigns: Dict[int, CampaignArc] = {}
         self.expiry_times: Dict[int, datetime] = {}
-        self.ttl_hours = 72  # 3 dni
+        self.ttl_hours = 72  
         
-        # File storage dla persistence
+        
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
     
-    # ========================================================================
-    # Session Context Methods (existing)
-    # ========================================================================
+    
+    
+    
     
     def save_context(self, session_id: int, context: Dict):
         """Save session context (lokacja, NPC, historia)"""
@@ -38,7 +38,7 @@ class SessionStorage:
         self.expiry_times[session_id] = datetime.now() + timedelta(hours=self.ttl_hours)
         self._cleanup_expired()
         
-        # Save to file
+        
         self._save_to_file(session_id, 'context')
     
     def get_context(self, session_id: int) -> Optional[Dict]:
@@ -48,7 +48,7 @@ class SessionStorage:
         if session_id in self.sessions:
             return self.sessions[session_id]
         
-        # Try loading from file
+        
         return self._load_from_file(session_id, 'context')
     
     def delete_context(self, session_id: int):
@@ -58,32 +58,32 @@ class SessionStorage:
         if session_id in self.expiry_times:
             del self.expiry_times[session_id]
         
-        # Delete file
+        
         context_file = self.storage_dir / f"session_{session_id}_context.json"
         if context_file.exists():
             context_file.unlink()
     
-    # ========================================================================
-    # Campaign Arc Methods
-    # ========================================================================
+    
+    
+    
     
     def save_campaign(self, session_id: int, campaign: CampaignArc):
         """Save campaign arc"""
         self.campaigns[session_id] = campaign
         self.expiry_times[session_id] = datetime.now() + timedelta(hours=self.ttl_hours)
         
-        # Save to file
+        
         self._save_to_file(session_id, 'campaign', campaign.dict())
     
     def get_campaign(self, session_id: int) -> Optional[CampaignArc]:
         """Get campaign arc"""
         self._cleanup_expired()
         
-        # Check memory
+        
         if session_id in self.campaigns:
             return self.campaigns[session_id]
         
-        # Try loading from file
+        
         data = self._load_from_file(session_id, 'campaign')
         if data:
             campaign = CampaignArc(**data)
@@ -101,9 +101,9 @@ class SessionStorage:
         if campaign_file.exists():
             campaign_file.unlink()
     
-    # ========================================================================
-    # Intro Methods
-    # ========================================================================
+    
+    
+    
     
     def save_intro(self, session_id: int, intro_message: Dict):
         """
@@ -140,9 +140,9 @@ class SessionStorage:
         self.sessions[intro_key] = intro_data
         self.expiry_times[intro_key] = datetime.now() + timedelta(hours=self.ttl_hours)
         print(f"💾 Intro cached for session {session_id}")
-    # ========================================================================
-    # World State Methods
-    # ========================================================================
+    
+    
+    
     
     def save_world_state(self, session_id: int, world_state: WorldState):
         """Save world state to disk"""
@@ -184,9 +184,9 @@ class SessionStorage:
             world_file.unlink()
             print(f"🗑️ World state deleted: {world_file.name}")
     
-    # ========================================================================
-    # Helper Methods
-    # ========================================================================
+    
+    
+    
     
     def exists(self, session_id: int) -> bool:
         """Check if session exists"""

@@ -1,4 +1,4 @@
-# backend/app/core/scraper/wiki_content_cache.py
+
 """
 Cache dla PEŁNEJ zawartości wiki articles
 Używany przez RAG system
@@ -36,7 +36,7 @@ class WikiContentCache:
             with open(cache_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            # Check validity
+            
             cached_time = datetime.fromisoformat(data['cached_at'])
             if datetime.now() - cached_time > self.validity:
                 return None
@@ -82,7 +82,7 @@ class WikiContentCache:
         keyword_lower = keyword.lower()
         
         for cache_file in self.cache_dir.glob(f"{universe}_*.json"):
-            if len(results) >= limit * 2:  # Search więcej, potem sortuj
+            if len(results) >= limit * 2:  
                 break
             
             try:
@@ -91,14 +91,14 @@ class WikiContentCache:
                 
                 content = data.get('content', {})
                 
-                # Build searchable text
+                
                 searchable = " ".join([
                     content.get('name', ''),
                     content.get('description', ''),
                     content.get('biography', '')[:500]
                 ]).lower()
                 
-                # Count occurrences (simple relevance)
+                
                 relevance = searchable.count(keyword_lower)
                 
                 if relevance > 0:
@@ -110,16 +110,16 @@ class WikiContentCache:
             except:
                 continue
         
-        # Sort by relevance
+        
         results.sort(key=lambda x: x['relevance'], reverse=True)
         return results[:limit]
     
     def _sanitize_filename(self, title: str) -> str:
         """Bezpieczna nazwa pliku"""
-        # Remove special characters
+        
         safe = title.replace('/', '_').replace('\\', '_').replace(' ', '_')
         safe = ''.join(c for c in safe if c.isalnum() or c in '_-')
-        return safe[:100]  # Max 100 chars
+        return safe[:100]  
     
     def clear(self):
         """Wyczyść cały cache"""

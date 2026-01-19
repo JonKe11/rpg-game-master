@@ -1,4 +1,4 @@
-# backend/app/models/player_inventory.py
+
 """
 Player Inventory Model
 
@@ -9,8 +9,8 @@ Only players (not GM) have inventory.
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, JSON # ✅ Dodano JSON
-# ✅ Upewnij się, że importujesz MultiplayerCampaign, jeśli jest potrzebny do relationship
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, JSON 
+
 from app.models.database import Base
 from app.models.campaign import MultiplayerCampaign 
 from app.models.user import User
@@ -28,40 +28,40 @@ class PlayerInventory(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     
-    # Relationships
-    # ✅ POPRAWKA 1: Zmieniono "campaigns.id" na "multiplayer_campaigns.id" (lub na poprawną nazwę tabeli)
+    
+    
     campaign_id = Column(Integer, ForeignKey("multiplayer_campaigns.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     character_id = Column(Integer, ForeignKey("characters.id", ondelete="SET NULL"), nullable=True)
     
-    # Item details
+    
     item_name = Column(String(255), nullable=False)
-    item_category = Column(String(50), nullable=False)  # weapons, armor, items, vehicles, droids
+    item_category = Column(String(50), nullable=False)  
     item_image_url = Column(String(500), nullable=True)
     item_description = Column(String(1000), nullable=True)
-    # ✅ NOWE POLE
+    
     item_rarity = Column(String, default="common")
-    # Quantity and metadata
+    
     quantity = Column(Integer, default=1, nullable=False)
-    # Przechowuje np. {"strength": 2, "dexterity": -1, "ac": 5}
+    
     stat_modifiers = Column(JSON, default={}, nullable=True)
     added_by_gm_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     added_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    notes = Column(String(500), nullable=True)  # GM can add notes
-    # ✅ NOWE POLA: Mechanika RPG
+    notes = Column(String(500), nullable=True)  
+    
     is_equipped = Column(Boolean, default=False)
-    slot = Column(String(50), default="item") # weapon, armor, accessory, item
-    dice_config = Column(JSON, nullable=True) # np. {"count": 3, "sides": 12}
-    # ✅ NOWE: Wartość pancerza przedmiotu (dla przedmiotów typu 'armor')
+    slot = Column(String(50), default="item") 
+    dice_config = Column(JSON, nullable=True) 
+    
     armor_value = Column(Integer, default=0)
-    # Relationships
-    # ✅ POPRAWKA 2: Zmieniono "Campaign" na "MultiplayerCampaign"
+    
+    
     campaign = relationship("MultiplayerCampaign", back_populates="inventory_items")
     user = relationship("User", foreign_keys=[user_id])
     character = relationship("Character")
     added_by = relationship("User", foreign_keys=[added_by_gm_id])
     
-    # Indexes for performance
+    
     __table_args__ = (
         Index('idx_inventory_campaign_user', 'campaign_id', 'user_id'),
         Index('idx_inventory_campaign', 'campaign_id'),
@@ -73,4 +73,4 @@ class PlayerInventory(Base):
     
     def to_dict(self):
         """Convert to dictionary for API responses"""
-        # ... (bez zmian)
+        

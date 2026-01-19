@@ -1,45 +1,45 @@
-// frontend/src/components/multiplayer/CombatTracker.js
+
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axiosConfig';
 
 function CombatTracker({ campaignId, onSendEvent }) {
-    // Lista aktywnych uczestników walki
+    
     const [combatants, setCombatants] = useState([]);
     
-    // Lista dostępnych kandydatów (Gracze + NPC z bazy)
+    
     const [candidates, setCandidates] = useState([]);
     
-    // Zbiór zaznaczonych ID z listy kandydatów
+    
     const [selectedCandidateIds, setSelectedCandidateIds] = useState(new Set());
 
     const [round] = useState(1); 
     const [loading, setLoading] = useState(true);
 
-    // ✅ AUTOMATYCZNE ŁADOWANIE NA STARCIE
+    
     useEffect(() => {
         fetchAllPotentialCombatants();
-        // eslint-disable-next-line
+        
     }, [campaignId]);
 
-    // Funkcja pobierająca Graczy (z fixem HP) oraz NPC
+    
     const fetchAllPotentialCombatants = async () => {
         setLoading(true);
         try {
             const allCandidates = [];
 
-            // 1. POBIERZ GRACZY (Z PEŁNYMI STATYSTYKAMI)
+            
             const playersRes = await api.get(`/multiplayer/inventory/campaigns/${campaignId}/players`);
             const players = playersRes.data.filter(p => p.role !== 'gm');
 
             const playersWithStats = await Promise.all(players.map(async (p) => {
                 try {
-                    // Pobieramy kartę, żeby mieć aktualne HP/AC
+                    
                     const charRes = await api.get(`/multiplayer/inventory/campaigns/${campaignId}/player/${p.user_id}/character`);
                     const char = charRes.data;
                     
                     return {
-                        id: `player_${char.id}`, // Unikalne ID dla listy
-                        realId: char.id,         // Prawdziwe ID do bazy
+                        id: `player_${char.id}`, 
+                        realId: char.id,         
                         userId: p.user_id,
                         name: char.name,
                         type: 'player',
@@ -58,7 +58,7 @@ function CombatTracker({ campaignId, onSendEvent }) {
             
             allCandidates.push(...playersWithStats.filter(Boolean));
 
-            // 2. POBIERZ NPC
+            
             const campaignRes = await api.get(`/multiplayer/campaigns/${campaignId}`);
             if (campaignRes.data.spawned_npcs) {
                 const npcs = campaignRes.data.spawned_npcs.map(npc => ({
@@ -86,7 +86,7 @@ function CombatTracker({ campaignId, onSendEvent }) {
         }
     };
 
-    // Obsługa zaznaczania checkboxów
+    
     const toggleCandidate = (candidateId) => {
         const newSet = new Set(selectedCandidateIds);
         if (newSet.has(candidateId)) {
@@ -97,21 +97,21 @@ function CombatTracker({ campaignId, onSendEvent }) {
         setSelectedCandidateIds(newSet);
     };
 
-    // Dodanie zaznaczonych do aktywnej walki
+    
     const handleAddSelected = () => {
         const toAdd = candidates.filter(c => selectedCandidateIds.has(c.id));
         
-        // Filtrujemy, żeby nie dodać duplikatów, jeśli już są w walce
+        
         setCombatants(prev => {
             const existingIds = new Set(prev.map(c => c.id));
             const uniqueToAdd = toAdd.filter(c => !existingIds.has(c.id)).map(c => ({
                 ...c,
-                active: false // Reset stanu aktywności przy dodawaniu
+                active: false 
             }));
             return [...prev, ...uniqueToAdd];
         });
 
-        // Opcjonalnie: Wyczyść zaznaczenie
+        
         setSelectedCandidateIds(new Set());
     };
 

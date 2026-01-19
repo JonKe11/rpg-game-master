@@ -19,7 +19,7 @@ function RegisterForm({ onRegisterSuccess, onSwitchToLogin }) {
     e.preventDefault();
     setError('');
 
-    // Walidacja
+
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
@@ -39,7 +39,7 @@ function RegisterForm({ onRegisterSuccess, onSwitchToLogin }) {
         password
   });
 
-      // Po rejestracji automatycznie zaloguj
+
       const loginData = new URLSearchParams();
       loginData.append('username', username);
       loginData.append('password', password);

@@ -1,4 +1,4 @@
-// frontend/src/components/profile/ProfilePage.js
+
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axiosConfig';
 import FriendsList from './FriendsList';
@@ -6,7 +6,7 @@ import FriendsList from './FriendsList';
 function ProfilePage({ onBack }) {
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('overview'); // overview, campaigns, friends
+    const [activeTab, setActiveTab] = useState('overview'); 
 
     useEffect(() => {
         fetchProfile();

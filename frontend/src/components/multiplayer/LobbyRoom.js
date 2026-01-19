@@ -84,7 +84,7 @@ function LobbyRoom({ campaign, character, onStart, onBack }) {
   const isPaused = campaignData.status === 'paused';
   const players = (campaignData.participants || []).filter(p => p.role !== 'gm');
   
-  // ✅ ZMODYFIKOWANA LOGIKA: Kiedy można wystartować
+  
   const canStart = () => {
     if (!campaignData.game_master_id) return false;
     if (campaignData.status === 'lobby') {
@@ -92,7 +92,7 @@ function LobbyRoom({ campaign, character, onStart, onBack }) {
       return allReady;
     }
     if (campaignData.status === 'paused') {
-      return true; // GM może wznowić w dowolnym momencie
+      return true; 
     }
     return false;
   };

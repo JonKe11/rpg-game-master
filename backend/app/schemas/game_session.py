@@ -1,4 +1,4 @@
-# backend/app/schemas/game_session.py
+
 from typing import List, Dict, Optional, TypedDict
 from pydantic import BaseModel
 from datetime import datetime

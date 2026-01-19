@@ -1,8 +1,8 @@
-// frontend/src/components/multiplayer/DiceRoller.js
+
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axiosConfig';
 
-const DIES = [20, 4, 6, 8, 10, 12, 100]; // d20 na początku, bo najważniejsza
+const DIES = [20, 4, 6, 8, 10, 12, 100]; 
 
 const ATTRIBUTES = [
     { key: 'none', label: 'Basic' },
@@ -20,19 +20,19 @@ function DiceRoller({ campaignId, characterId, characterStats, targets = [], onA
     const [equippedWeapon, setEquippedWeapon] = useState(null);
     const [selectedTargetId, setSelectedTargetId] = useState('');
 
-    // 1. Pobierz broń gracza (jeśli to gracz)
+    
     useEffect(() => {
-        // Jeśli to NPC sterowany przez GM, nie pobieramy ekwipunku (zakładamy że ma staty wprost lub GM używa standardowych rzutów)
+        
         if (characterId === 'gm_npc' || !characterId) return;
 
         const fetchWeapon = async () => {
             try {
-                // Pobieramy inventory gracza na podstawie jego UserID (pobranego z localStorage dla uproszczenia w tym komponencie)
+                
                 const user = JSON.parse(localStorage.getItem('user'));
                 if (user) {
-                    // UWAGA: Endpoint musi zwracać przedmioty gracza.
+                    
                     const res = await api.get(`/multiplayer/inventory/campaigns/${campaignId}/inventory/${user.id}`);
-                    // Szukamy przedmiotu w slocie 'weapon', który jest wyekwipowany
+                    
                     const weapon = res.data.items.find(i => i.is_equipped && i.slot === 'weapon');
                     setEquippedWeapon(weapon);
                 }
@@ -43,16 +43,16 @@ function DiceRoller({ campaignId, characterId, characterStats, targets = [], onA
         fetchWeapon();
     }, [campaignId, characterId]);
 
-    // Automatycznie wybierz pierwszy cel (jeśli jest tylko jeden wróg, to wygodne)
+    
     useEffect(() => {
         if (targets.length > 0 && !selectedTargetId) {
-            // Preferujmy wybór NPC jako celu domyślnego
+            
             const firstEnemy = targets.find(t => t.type === 'npc') || targets[0];
             if (firstEnemy) setSelectedTargetId(firstEnemy.id);
         }
     }, [targets, selectedTargetId]);
 
-    // Oblicz modyfikator: floor((stat - 10) / 2)
+    
     const getModifier = (attrKey) => {
         if (attrKey === 'none' || !characterStats) return 0;
         const value = characterStats[attrKey] || 10;
@@ -61,7 +61,7 @@ function DiceRoller({ campaignId, characterId, characterStats, targets = [], onA
 
     const currentModifier = getModifier(selectedAttr);
 
-    // Rzut Standardowy
+    
     const rollDice = async (sides) => {
         if (isRolling) return;
         setIsRolling(true);
@@ -92,7 +92,7 @@ function DiceRoller({ campaignId, characterId, characterStats, targets = [], onA
         }
     };
 
-    // Rzut Ataku Bronią
+    
     const handleWeaponAttack = async () => {
         if (!equippedWeapon || !equippedWeapon.dice_config) return;
         if (!selectedTargetId) return alert("Select a target first!");
@@ -101,12 +101,12 @@ function DiceRoller({ campaignId, characterId, characterStats, targets = [], onA
         setIsRolling(true);
         try {
             const { count, sides } = equippedWeapon.dice_config;
-            // Tutaj uproszczenie: używamy wybranego atrybutu (np. STR) jako modyfikatora do obrażeń
+            
             const dmgMod = currentModifier; 
 
-            // 1. Obliczamy obrażenia lokalnie (żeby móc je zaaplikować)
-            // W idealnym świecie backend robi rzut i zwraca wynik, ale tutaj robimy to "na zaufaniu" klienta
-            // lub wysyłamy log rzutu, a potem aplikujemy obrażenia.
+            
+            
+            
             
             let totalRoll = 0;
             const rolls = [];
@@ -119,14 +119,14 @@ function DiceRoller({ campaignId, characterId, characterStats, targets = [], onA
 
             const targetName = targets.find(t => t.id === selectedTargetId)?.name || 'target';
 
-            // 2. Wysyłamy wiadomość narracyjną o ataku
+            
             await api.post(`/multiplayer/campaigns/${campaignId}/messages`, {
                 message_type: 'player_action',
                 content: `⚔️ **Attacks ${targetName}** with ${equippedWeapon.item_name}!\n🎲 Damage Roll: [${rolls.join(' + ')}] ${dmgMod ? (dmgMod > 0 ? `+ ${dmgMod}` : dmgMod) : ''} = **${totalDamage} DMG**`,
                 character_id: characterId === 'gm_npc' ? null : characterId
             });
 
-            // 3. Wywołujemy callback, który odejmie HP w 'MultiplayerSession'
+            
             if (onAttack) {
                 onAttack(totalDamage, selectedTargetId);
             }

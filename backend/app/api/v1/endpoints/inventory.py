@@ -1,4 +1,4 @@
-# backend/app/api/v1/endpoints/inventory.py
+
 """
 Inventory API Endpoints
 
@@ -83,19 +83,19 @@ async def get_campaign_players(
         user_id = participant.get('user_id')
         character_id = participant.get('character_id')
         
-        # Get user info
+        
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             continue
         
-        # Get character info if exists
+        
         character_name = None
         if character_id:
             character = db.query(Character).filter(Character.id == character_id).first()
             if character:
                 character_name = character.name
         
-        # Count inventory items
+        
         inventory_count = db.query(PlayerInventory).filter(
             PlayerInventory.campaign_id == campaign_id,
             PlayerInventory.user_id == user_id
@@ -129,7 +129,7 @@ async def get_player_inventory(
     campaign = get_campaign_or_404(campaign_id, db)
     check_is_participant(campaign, current_user.id)
     
-    # Check permissions
+    
     is_gm = campaign.game_master_id == current_user.id
     is_own_inventory = user_id == current_user.id
     
@@ -139,7 +139,7 @@ async def get_player_inventory(
             detail="You can only view your own inventory (or you must be GM)"
         )
     
-    # Get player info
+    
     player = db.query(User).filter(User.id == user_id).first()
     if not player:
         raise HTTPException(
@@ -147,7 +147,7 @@ async def get_player_inventory(
             detail="Player not found"
         )
     
-    # Get character info
+    
     participants = campaign.participants or []
     participant = next((p for p in participants if p.get('user_id') == user_id), None)
     
@@ -159,14 +159,14 @@ async def get_player_inventory(
         if character:
             character_name = character.name
     
-    # Get inventory items
-    # Sortujemy: najpierw wyposażone, potem po dacie dodania
+    
+    
     items = db.query(PlayerInventory).filter(
         PlayerInventory.campaign_id == campaign_id,
         PlayerInventory.user_id == user_id
     ).order_by(PlayerInventory.is_equipped.desc(), PlayerInventory.added_at.desc()).all()
     
-    # Calculate stats
+    
     total_items = sum(item.quantity for item in items)
     items_by_category = {}
     for item in items:
@@ -198,28 +198,28 @@ async def add_item_to_player(
     campaign = get_campaign_or_404(campaign_id, db)
     check_is_gm(campaign, current_user)
     
-    # Verify player is in campaign
+    
     check_is_participant(campaign, request.player_user_id)
     
-    # Get player's character_id from participants
+    
     participants = campaign.participants or []
     participant = next((p for p in participants if p.get('user_id') == request.player_user_id), None)
     character_id = participant.get('character_id') if participant else None
     
-    # Check if item already exists
+    
     existing_item = db.query(PlayerInventory).filter(
         PlayerInventory.campaign_id == campaign_id,
         PlayerInventory.user_id == request.player_user_id,
         PlayerInventory.item_name == request.item_name
     ).first()
     
-    # Pobieramy nowe wartości z requestu
+    
     new_slot = getattr(request, 'slot', 'item')
     new_dice_config = getattr(request, 'dice_config', None)
     new_rarity = getattr(request, 'item_rarity', 'common')
 
     if existing_item:
-        # ✅ FIX: Jeśli przedmiot istnieje, zaktualizuj jego metadane (Slot/Kości)!
+        
         existing_item.quantity += request.quantity
         existing_item.slot = new_slot 
         existing_item.dice_config = new_dice_config
@@ -235,7 +235,7 @@ async def add_item_to_player(
         db.refresh(existing_item)
         return InventoryItemResponse.from_orm(existing_item)
     
-    # Create new item
+    
     new_item = PlayerInventory(
         campaign_id=campaign_id,
         user_id=request.player_user_id,
@@ -245,11 +245,11 @@ async def add_item_to_player(
         item_image_url=request.item_image_url,
         item_description=request.item_description,
         item_rarity=new_rarity,
-        # ✅ NOWE POLA
+        
         slot=new_slot,
         dice_config=new_dice_config,
         is_equipped=False,
-        # ---
+        
         quantity=request.quantity,
         added_by_gm_id=current_user.id,
         notes=request.notes,
@@ -282,7 +282,7 @@ async def toggle_equip_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     
-    # Weryfikacja uprawnień (właściciel lub GM)
+    
     if item.user_id != current_user.id:
         campaign = get_campaign_or_404(campaign_id, db)
         if campaign.game_master_id != current_user.id:
@@ -292,10 +292,10 @@ async def toggle_equip_item(
         raise HTTPException(status_code=400, detail="This item cannot be equipped")
 
     if item.is_equipped:
-        # Zdejmij
+        
         item.is_equipped = False
     else:
-        # Spróbuj założyć (sprawdź limity)
+        
         user_items = db.query(PlayerInventory).filter(
             PlayerInventory.campaign_id == campaign_id,
             PlayerInventory.user_id == item.user_id,
@@ -303,15 +303,15 @@ async def toggle_equip_item(
         ).all()
 
         if item.slot == 'weapon':
-            # Zdejmij inną broń
+            
             for i in user_items:
                 if i.slot == 'weapon': i.is_equipped = False
         elif item.slot == 'armor':
-            # Zdejmij inną zbroję
+            
             for i in user_items:
                 if i.slot == 'armor': i.is_equipped = False
         elif item.slot == 'accessory':
-            # Max 4 akcesoria
+            
             acc_count = sum(1 for i in user_items if i.slot == 'accessory')
             if acc_count >= 4:
                 raise HTTPException(status_code=400, detail="You can only equip 4 accessories.")
@@ -348,7 +348,7 @@ async def update_inventory_item(
             detail="Inventory item not found"
         )
     
-    # Update fields
+    
     if update_data.quantity is not None:
         if update_data.quantity == 0:
             db.delete(item)
@@ -448,7 +448,7 @@ async def get_player_character(
         'armor_class': getattr(character, 'armor_class', 10),
         'background': getattr(character, 'background', ''),
         
-        # ✅ FIX: Dodano brakujące pola
+        
         'backstory': getattr(character, 'backstory', ''),
         'description': getattr(character, 'description', ''),
         'age': getattr(character, 'age', None),
@@ -462,7 +462,7 @@ async def get_player_character(
             'wisdom': getattr(character, 'wisdom', 10),
             'charisma': getattr(character, 'charisma', 10),
         },
-        # ✅ FIX: Poprawiono nazwy pól (dodano skill_)
+        
         'skills': {
             'computer_use': getattr(character, 'skill_computer_use', 0),
             'demolitions': getattr(character, 'skill_demolitions', 0),

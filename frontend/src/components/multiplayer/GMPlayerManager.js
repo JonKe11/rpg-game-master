@@ -1,10 +1,10 @@
-// frontend/src/components/multiplayer/GMPlayerManager.js
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../../api/axiosConfig';
 import PlayerInventoryPanel from './PlayerInventoryPanel';
 import ItemEditor from './ItemEditor';
 
-// StatMap bez zmian...
+
 const statMap = {
     'str': 'strength', 'dex': 'dexterity', 'con': 'constitution', 
     'int': 'intelligence', 'wis': 'wisdom', 'cha': 'charisma',
@@ -18,11 +18,11 @@ function GMPlayerManager({ campaign, isGM, universe = 'star_wars' }) {
     const [selectedPlayer, setSelectedPlayer] = useState(null);
     const [viewMode, setViewMode] = useState(null);
     
-    // Dane do podglądu postaci
+    
     const [characterData, setCharacterData] = useState(null);
     const [playerInventory, setPlayerInventory] = useState([]); 
     
-    // ✅ NOWE: Stan edycji statystyk
+    
     const [isEditingStats, setIsEditingStats] = useState(false);
     const [editStats, setEditStats] = useState({ hp: 0, max_hp: 0, level: 1 });
 
@@ -71,14 +71,14 @@ function GMPlayerManager({ campaign, isGM, universe = 'star_wars' }) {
         return total;
     }, [characterData, playerInventory]);
 
-    // --- HANDLERS ---
+    
 
     const handleViewInventory = (player) => { setSelectedPlayer(player); setViewMode('inventory'); };
     
     const handleViewCharacter = async (player) => {
         setSelectedPlayer(player);
         setViewMode('character');
-        setIsEditingStats(false); // Reset edycji
+        setIsEditingStats(false); 
         try {
             const [charRes, invRes] = await Promise.all([
                 api.get(`/multiplayer/inventory/campaigns/${campaign.id}/player/${player.user_id}/character`),
@@ -88,7 +88,7 @@ function GMPlayerManager({ campaign, isGM, universe = 'star_wars' }) {
             setCharacterData(charRes.data);
             setPlayerInventory(invRes.data.items || []);
             
-            // Inicjalizacja formularza edycji
+            
             setEditStats({
                 hp: charRes.data.hp,
                 max_hp: charRes.data.max_hp,
@@ -97,14 +97,14 @@ function GMPlayerManager({ campaign, isGM, universe = 'star_wars' }) {
         } catch (error) { console.error(error); }
     };
     
-    // ✅ NOWE: Zapisywanie zmienionych statystyk
+    
     const handleSaveStats = async () => {
         if (!characterData) return;
         try {
             await api.patch(`/characters/${characterData.id}/stats`, editStats);
             alert("✅ Stats updated!");
             setIsEditingStats(false);
-            // Odśwież dane
+            
             handleViewCharacter(selectedPlayer);
         } catch (error) {
             console.error("Failed to update stats:", error);

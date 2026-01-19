@@ -1,13 +1,13 @@
-# backend/app/models/friendship.py
+
 from sqlalchemy import Column, Integer, ForeignKey, String, Enum as SQLEnum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .database import Base
 import enum
 
 class FriendshipStatus(enum.Enum):
-    PENDING = "pending"   # Wysłane zaproszenie
-    ACCEPTED = "accepted" # Znajomi
-    BLOCKED = "blocked"   # Zablokowany
+    PENDING = "pending"   
+    ACCEPTED = "accepted" 
+    BLOCKED = "blocked"   
 
 class Friendship(Base):
     __tablename__ = "friendships"
@@ -17,7 +17,7 @@ class Friendship(Base):
     receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(SQLEnum(FriendshipStatus), default=FriendshipStatus.PENDING)
 
-    # Relacje
+    
     sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_friend_requests")
     receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_friend_requests")
 

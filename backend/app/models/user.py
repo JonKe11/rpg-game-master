@@ -1,4 +1,4 @@
-# backend/app/models/user.py
+
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -15,11 +15,11 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Relacje
+    
     characters = relationship("Character", back_populates="owner")
     game_sessions = relationship("GameSession", back_populates="game_master")
     
-    # ✅ NOWE: Relacje znajomych
+    
     sent_friend_requests = relationship(
         "Friendship",
         foreign_keys="Friendship.sender_id",

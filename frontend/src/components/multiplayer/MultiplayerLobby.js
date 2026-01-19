@@ -23,11 +23,11 @@ function MultiplayerLobby({ character, onClose }) {
     setView('lobby');
   };
 
-  // ✅ POPRAWIONE: Przyjmij fresh campaign data
+
   const handleCampaignStarted = (freshCampaignData) => {
     console.log('🎮 Starting session with fresh data:', freshCampaignData);
     
-    // ✅ Zaktualizuj selectedCampaign świeżymi danymi
+  
     setSelectedCampaign(freshCampaignData);
     setView('session');
   };
@@ -81,14 +81,14 @@ function MultiplayerLobby({ character, onClose }) {
           <LobbyRoom 
             campaign={selectedCampaign}
             character={character}
-            onStart={handleCampaignStarted}  // ✅ Przekazuje fresh data
+            onStart={handleCampaignStarted}  
             onBack={handleBackToList}
           />
         )}
 
         {view === 'session' && selectedCampaign && (
           <MultiplayerSession 
-            campaign={selectedCampaign}  // ✅ Teraz ma fresh data!
+            campaign={selectedCampaign}  
             character={character}
             onEnd={handleBackToList}
           />

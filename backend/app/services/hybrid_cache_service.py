@@ -1,4 +1,4 @@
-# backend/app/services/hybrid_cache_service.py
+
 
 
 from typing import List, Dict, Optional
@@ -26,9 +26,9 @@ class HybridCacheService:
         self.pg_cache = PostgresCacheService(db)
         self.image_fetcher = ImageFetcher()
     
-    # ============================================
-    # GŁÓWNA ZMODYFIKOWANA FUNKCJA
-    # ============================================
+    
+    
+    
     
     def get_category_with_metadata(
         self,
@@ -80,9 +80,9 @@ class HybridCacheService:
             'items': items
         }
     
-    # ============================================
-    # POZOSTAŁE FUNKCJE (Uproszczone lub bez zmian)
-    # ============================================
+    
+    
+    
     
     def get_planets_with_metadata(
         self,
@@ -140,10 +140,10 @@ class HybridCacheService:
         
         return results
     
-    # ============================================
-    # FUNKCJE POMOCNICZE (bez zmian)
-    # Wywoływane przez startup_prefetch_service lub inne
-    # ============================================
+    
+    
+    
+    
     
     def prefetch_images_for_category(
         self,
@@ -241,7 +241,7 @@ class HybridCacheService:
                     'operation': log.operation_type,
                     'status': log.status,
                     'duration': log.duration_seconds,
-                    'articles_processed': log.articles_cached, # Użyj cached zamiast fetched
+                    'articles_processed': log.articles_cached, 
                     'started_at': log.started_at.isoformat()
                 }
                 for log in recent_logs

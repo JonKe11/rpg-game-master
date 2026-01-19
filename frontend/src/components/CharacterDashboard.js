@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axiosConfig';
 import CharacterCreationWizard from '../components/CharacterCreationWizard';
-import CharacterDetails from '../components/CharacterDetails'; // Upewnij się, że masz ten plik
-// import CharacterEditModal from '../components/CharacterEditModal'; // Jeśli używasz
+import CharacterDetails from '../components/CharacterDetails'; 
+// import CharacterEditModal from '../components/CharacterEditModal'; 
 
 function CharacterDashboard({ user, onStartSession }) {
   const [characters, setCharacters] = useState([]);
@@ -105,15 +105,15 @@ function CharacterDashboard({ user, onStartSession }) {
           Details
         </button>
 
-        {/* ✅ POPRAWIONY DROPDOWN (Fix "hover tunnel") */}
+   
         <div className="relative group">
           <button className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition duration-200">
             🎮 Start Session ▼
           </button>
           
-          {/* Wrapper z paddingiem (pt-1) działający jak most */}
+      
           <div className="hidden group-hover:block absolute left-0 top-full pt-1 w-48 z-50">
-            {/* Właściwe pudełko z menu */}
+          
             <div className="bg-gray-800 rounded-lg shadow-xl border border-gray-700 overflow-hidden">
               <button
                 onClick={() => onStartSession(character, 'ai')}
@@ -144,7 +144,7 @@ function CharacterDashboard({ user, onStartSession }) {
             onClose={handleCloseDetails}
             onDelete={handleDeleteClick}
             onStartSession={() => onStartSession(selectedCharacter, 'multiplayer')}
-            // Dodaj onEdit jeśli masz
+      
         />
       )}
 

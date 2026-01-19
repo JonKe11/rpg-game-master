@@ -112,7 +112,7 @@ function PlayerCharacterSheet({
 
     useEffect(() => {
         loadData();
-        const interval = setInterval(loadData, 5000); // Live refresh for equip changes
+        const interval = setInterval(loadData, 5000); 
         return () => clearInterval(interval);
     }, [loadData]);
 

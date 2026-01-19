@@ -1,4 +1,4 @@
-# backend/app/api/v1/endpoints/multiplayer.py
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Optional, Any
@@ -14,13 +14,13 @@ from app.websocket import manager
 from app.models.friendship import Friendship, FriendshipStatus
 router = APIRouter()
 
-# ============================================================================
-# PYDANTIC MODELS
-# ============================================================================
+
+
+
 
 class CampaignCreateRequest(BaseModel):
     title: str
-    description: Optional[str] = None  # ✅ NOWE POLE
+    description: Optional[str] = None  
     universe: str
     is_public: bool = True
 
@@ -32,7 +32,7 @@ class JoinCampaignRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     message_type: str
     content: str = ""
-    # ✅ POPRAWKA: Jawnie Optional[int], żeby przyjmowało null z frontendu
+    
     character_id: Optional[int] = None 
     metadata: Dict[str, Any] = {}
     dice_type: Optional[int] = None
@@ -44,9 +44,9 @@ class UpdateMessageRequest(BaseModel):
     content: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     
-# ============================================================================
-# CAMPAIGN MANAGEMENT
-# ============================================================================
+
+
+
 
 @router.post("/campaigns/create")
 async def create_campaign(
@@ -64,7 +64,7 @@ async def create_campaign(
         is_public=request.is_public,
         status=CampaignStatus.LOBBY,
         participants=[],
-        spawned_npcs=[]  # ✅ Inicjalizacja pustej listy NPC
+        spawned_npcs=[]  
     )
     
     db.add(campaign)
@@ -94,7 +94,7 @@ async def list_campaigns(
     from app.models.friendship import Friendship, FriendshipStatus
     from sqlalchemy import or_, and_
 
-    # Pobierz ID znajomych
+    
     friends_ships = db.query(Friendship).filter(
         or_(Friendship.sender_id == current_user.id, Friendship.receiver_id == current_user.id),
         Friendship.status == FriendshipStatus.ACCEPTED
@@ -105,12 +105,12 @@ async def list_campaigns(
         fid = f.receiver_id if f.sender_id == current_user.id else f.sender_id
         friend_ids.append(fid)
     
-    # Główne zapytanie
+    
     campaigns = db.query(MultiplayerCampaign).filter(
         or_(
-            MultiplayerCampaign.is_public == True,                 # Publiczne
-            MultiplayerCampaign.creator_id == current_user.id,     # Moje
-            MultiplayerCampaign.creator_id.in_(friend_ids)         # Znajomych
+            MultiplayerCampaign.is_public == True,                 
+            MultiplayerCampaign.creator_id == current_user.id,     
+            MultiplayerCampaign.creator_id.in_(friend_ids)         
         )
     ).filter(
         MultiplayerCampaign.status.in_([CampaignStatus.LOBBY, CampaignStatus.ACTIVE, CampaignStatus.PAUSED])
@@ -163,7 +163,7 @@ async def get_campaign(
         "location_image_url": campaign.location_image_url,
         "max_players": campaign.max_players,
         "created_at": campaign.created_at.isoformat(),
-        # ✅ Zwracamy listę NPC dla Combat Trackera
+        
         "spawned_npcs": campaign.spawned_npcs or []
     }
 
@@ -187,7 +187,7 @@ async def join_campaign(
     participants = campaign.participants or []
     participant = next((p for p in participants if p.get("user_id") == current_user.id), None)
 
-    # Scenariusz 1: Dołączanie do LOBBY
+    
     if campaign.status == CampaignStatus.LOBBY:
         if participant:
             return {"message": "Already in lobby", "status": "joined"}
@@ -195,7 +195,7 @@ async def join_campaign(
         if len(participants) >= campaign.max_players:
             raise HTTPException(status_code=400, detail="Campaign is full")
         
-        # Dodaj nowego uczestnika
+        
         participants.append({
             "user_id": current_user.id,
             "username": current_user.username,
@@ -212,16 +212,16 @@ async def join_campaign(
             "content": f"{current_user.username} joined the lobby"
         })
 
-    # Scenariusz 2: Wznawianie sesji ACTIVE lub PAUSED
+    
     elif campaign.status in [CampaignStatus.ACTIVE, CampaignStatus.PAUSED]:
         if not participant:
             raise HTTPException(status_code=403, detail="Campaign is in progress and you are not a participant")
         
-        # Sprawdź, czy postać się zgadza
+        
         if participant.get("character_id") != request.character_id:
             raise HTTPException(status_code=403, detail="You must join with the same character you started with")
         
-        # Jeśli sesja była PAUSED, a dołącza GM, przenieś ją do LOBBY (wznawianie)
+        
         if campaign.status == CampaignStatus.PAUSED and campaign.game_master_id == current_user.id:
             campaign.status = CampaignStatus.LOBBY
             await manager.broadcast(campaign_id, {
@@ -303,7 +303,7 @@ async def start_campaign(
     
     players = [p for p in (campaign.participants or []) if p.get("role") != ParticipantRole.GAME_MASTER.value]
     
-    # Sprawdź "gotowość" tylko jeśli startujemy z LOBBY
+    
     if campaign.status == CampaignStatus.LOBBY:
         if not players: raise HTTPException(400, "Need at least one player to start")
         all_ready = all(p.get("ready", False) for p in players)
@@ -334,7 +334,7 @@ async def pause_campaign(
     campaign.last_activity = datetime.now()
     db.commit()
     
-    # Poinformuj wszystkich
+    
     await manager.broadcast(campaign_id, {
         "type": "session_paused",
         "content": "The Game Master has paused the session. Returning to lobby..."
@@ -406,26 +406,26 @@ async def send_message(
     Send message to campaign.
     Handles dice rolls and special types like npc_spawn.
     """
-    print(f"📩 Otrzymano wiadomość typu: {request.message_type}")  # DEBUG
+    print(f"📩 Otrzymano wiadomość typu: {request.message_type}")  
     
     final_content = request.content
     final_metadata = request.metadata or {}
     
-    # 1. Próba ustalenia typu (zgodnie z Enumem)
+    
     try:
         final_type = MessageType(request.message_type)
     except ValueError:
-        # Jeśli nie pasuje do Enuma, ustawiamy domyślny (dla bezpieczeństwa)
+        
         final_type = MessageType.PLAYER_ACTION
 
-    # 2. LOGIKA SPECJALNA - SPRAWDZAMY REQUEST BEZPOŚREDNIO
-    # (To naprawia błąd, gdzie poprawne Enumy omijały blok except)
+    
+    
     
     if request.message_type == 'npc_spawn':
         print("👤 Wykryto spawnowanie NPC! (Logic executing...)")
         
-        # Wymuszamy typ GM_EVENT dla bazy (żeby czat to ładnie renderował)
-        # Ale zachowujemy original_type dla frontendu
+        
+        
         final_type = MessageType.GM_EVENT 
         final_metadata['original_type'] = 'npc_spawn'
         
@@ -437,7 +437,7 @@ async def send_message(
             if 'id' not in spawned_npc:
                 spawned_npc['id'] = f"npc_{int(datetime.now().timestamp())}_{random.randint(100,999)}"
             
-            # SQLAlchemy JSON append pattern
+            
             current_npcs = list(campaign.spawned_npcs or [])
             current_npcs.append(spawned_npc)
             campaign.spawned_npcs = current_npcs
@@ -449,18 +449,18 @@ async def send_message(
         final_type = MessageType.GM_EVENT
         final_metadata['original_type'] = 'combat_update'
 
-    # 3. Obsługa kości
+    
     if request.message_type == "dice_roll":
         if not request.dice_type:
             raise HTTPException(status_code=400, detail="Dice type required")
         rolls = [random.randint(1, request.dice_type) for _ in range(request.dice_count)]
         total = sum(rolls) + request.modifier
         
-        # Próbujemy użyć typu DICE_ROLL_RESULT jeśli istnieje w Enumie
+        
         try:
             final_type = MessageType.DICE_ROLL_RESULT
         except (ValueError, AttributeError):
-            final_type = MessageType.SYSTEM # Fallback
+            final_type = MessageType.SYSTEM 
         
         reason = request.metadata.get("reason", "")
         reason_str = f" ({reason})" if reason else ""
@@ -469,7 +469,7 @@ async def send_message(
         final_content = f"rolled {request.dice_count}d{request.dice_type}{mod_str}{reason_str}: [{roll_str}] = {total}"
         final_metadata.update({"rolls": rolls, "total": total, "modifier": request.modifier, "dice_type": request.dice_type})
 
-    # 4. Zapis wiadomości
+    
     message = CampaignMessage(
         campaign_id=campaign_id,
         user_id=current_user.id,
@@ -483,7 +483,7 @@ async def send_message(
     db.commit()
     db.refresh(message)
     
-    # 5. Broadcast (wysyłamy oryginalny typ, żeby frontend wiedział co robić)
+    
     broadcast_type = request.message_type if request.message_type in ['npc_spawn', 'combat_update'] else message.message_type.value
 
     await manager.broadcast(campaign_id, {
@@ -522,14 +522,14 @@ async def update_message(
         
     campaign = db.query(MultiplayerCampaign).filter(MultiplayerCampaign.id == campaign_id).first()
     
-    # ✅ POPRAWKA BEZPIECZEŃSTWA: 
-    # Pozwalamy edytować wiadomość, jeśli użytkownik jest GM-em LUB jeśli to aktualizacja walki (combat_update)
+    
+    
     is_combat_update = message.message_metadata and message.message_metadata.get('original_type') == 'combat_update'
     
     if campaign.game_master_id != current_user.id and not is_combat_update:
         raise HTTPException(status_code=403, detail="Only GM can update campaign messages")
 
-    # Aktualizacja pól
+    
     if request.content is not None:
         message.content = request.content
     if request.metadata is not None:
@@ -538,8 +538,8 @@ async def update_message(
         
     db.commit()
     
-    # Wyślij powiadomienie o aktualizacji wiadomości
-    # Frontend musi obsłużyć typ 'message_update' i podmienić treść dymku
+    
+    
     original_type = message.message_metadata.get('original_type') or message.message_type.value
     
     await manager.broadcast(campaign_id, {
@@ -554,9 +554,9 @@ async def update_message(
     return {"success": True}
 
 
-# ============================================================================
-# LOCATION SYSTEM
-# ============================================================================
+
+
+
 
 @router.post("/campaigns/{campaign_id}/location")
 async def change_location(
@@ -578,7 +578,7 @@ async def change_location(
     if campaign.game_master_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only GM can change location")
     
-    # Update location
+    
     campaign.current_location = location_name
     if location_image_url:
         campaign.location_image_url = location_image_url
@@ -588,7 +588,7 @@ async def change_location(
     
     print(f"📍 Location changed to: {location_name}")
     
-    # Broadcast to all players (zmiana stanu)
+    
     await manager.broadcast(campaign_id, {
         "type": "location_change",
         "location": location_name,
@@ -596,7 +596,7 @@ async def change_location(
         "timestamp": datetime.now().isoformat()
     })
     
-    # Broadcast to all players (komunikat na czacie)
+    
     await manager.broadcast(campaign_id, {
         "type": "system",
         "content": f"📍 Location changed to: {location_name}",

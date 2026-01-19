@@ -1,4 +1,4 @@
-# backend/app/core/wiki/wookieepedia_client.py
+
 """
 Wookieepedia (Star Wars) implementation.
 
@@ -23,7 +23,7 @@ class WookieepediaClient(BaseWikiClient):
     - Fallback entities (Tatooine, Human, etc.)
     """
     
-    # Star Wars specific category mapping
+    
     CATEGORY_MAPPING = {
         'planets': 'Canon_planets',
         'species': 'Canon_species',
@@ -40,7 +40,7 @@ class WookieepediaClient(BaseWikiClient):
         'technology': 'Canon_technology',
     }
     
-    # Safe fallback entities
+    
     FALLBACK_ENTITIES = {
         'planet': 'Tatooine',
         'species': 'Human',
@@ -82,14 +82,14 @@ class WookieepediaClient(BaseWikiClient):
         Returns:
             True if valid Canon entity
         """
-        # Get category for entity type
-        category = self.CATEGORY_MAPPING.get(entity_type + 's')  # Pluralize
+        
+        category = self.CATEGORY_MAPPING.get(entity_type + 's')  
         
         if not category:
             return False
         
-        # Note: This is a simple check
-        # For full validation, would need to query API
+        
+        
         return True
     
     def get_fallback_entity(self, entity_type: str) -> str:

@@ -1,4 +1,4 @@
-# backend/app/core/ai/canon_validator.py
+
 """
 Dynamic canon validation using PostgreSQL as the source of truth.
 """
@@ -7,18 +7,18 @@ from typing import Set, List, Dict, Optional
 import logging
 import re
 
-# ⛔️ USUNIĘTE: Stare importy cache'a plików JSON
-# from app.core.scraper.wiki_content_cache import WikiContentCache
-# from app.core.scraper.wiki_scraper import WikiScraper
 
-# ✅ NOWE IMPORTY:
+
+
+
+
 from app.models.database import SessionLocal
 from app.services.postgres_cache_service import PostgresCacheService
-from app.models.wiki_article import article_to_dict # Załóżmy, że ta funkcja istnieje lub przenieś ją tutaj
+from app.models.wiki_article import article_to_dict 
 
 logger = logging.getLogger(__name__)
 
-# ✅ NOWA FUNKCJA POMOCNICZA (jeśli nie masz jej globalnie)
+
 def article_to_dict(article) -> Dict:
     """Konwertuje obiekt WikiArticle SQLAlchemy na słownik."""
     if not article: return {}
@@ -49,7 +49,7 @@ class CanonValidator:
     def __init__(self, universe: str = 'star_wars'):
         self.universe = universe
         
-        # ✅ NOWA LOGIKA: Dostęp do bazy danych
+        
         try:
             self.db = SessionLocal()
             self.pg_cache = PostgresCacheService(self.db)
@@ -59,7 +59,7 @@ class CanonValidator:
             self.db = None
             self.pg_cache = None
         
-        # ⛔️ USUNIĘTE: Wszystkie stare, leniwie ładowane zestawy (_canon_species, _categorized_data itp.)
+        
 
     def __del__(self):
         """Zamknij sesję bazy danych, gdy walidator jest niszczony"""
@@ -77,7 +77,7 @@ class CanonValidator:
                 universe=self.universe,
                 category=category,
                 query=query,
-                limit=limit or 1000, # Domyślny limit, jeśli nie podano
+                limit=limit or 1000, 
                 offset=0
             )
             return [article.title for article in results['items']]
@@ -104,22 +104,22 @@ class CanonValidator:
     def _check_entity_exists(self, entity: str, category: str) -> bool:
         """Sprawdza, czy encja istnieje w danej kategorii w PostgreSQL"""
         if not entity or not self.pg_cache:
-            return True # Zawsze zakładaj, że jest poprawna, jeśli nie ma encji lub bazy
+            return True 
         
         try:
-            # Użyj szybkiego wyszukiwania po tytule
+            
             article = self.pg_cache.get_article_by_title(entity, self.universe)
-            # Jeśli znaleziono i kategoria pasuje
+            
             if article and article.category == category:
                 return True
-            # Jeśli znaleziono, ale kategoria nie pasuje (np. "Luke" to 'character', a nie 'planet')
+            
             elif article:
                 return False
-            # Jeśli nie znaleziono po tytule (może być literówka lub AI coś wymyśliło)
+            
             return False
         except Exception as e:
             logger.error(f"Błąd walidacji encji {entity}: {e}")
-            return True # W razie błędu lepiej przepuścić
+            return True 
 
     def validate_species(self, species: str) -> bool:
         """Sprawdza, czy gatunek istnieje w bazie"""
@@ -154,7 +154,7 @@ class CanonValidator:
             results = self.pg_cache.search_articles_paginated(
                 universe=self.universe,
                 category=category,
-                query=term, # Użyj wyszukiwania ILIKE
+                query=term, 
                 limit=5
             )
             return [article.title for article in results['items']]
@@ -208,7 +208,7 @@ class CanonValidator:
             validated['unknown'] = list(proper_nouns)
             return validated
             
-        # Sprawdzanie każdej encji w bazie danych
+        
         for noun in proper_nouns:
             try:
                 article = self.pg_cache.get_article_by_title(noun, self.universe)
@@ -221,13 +221,13 @@ class CanonValidator:
                     elif category == 'organizations':
                         validated['valid_organizations'].append(noun)
                     else:
-                        validated['unknown'].append(noun) # Znaleziono, ale to inna kategoria
+                        validated['unknown'].append(noun) 
                 else:
-                    # Nie znaleziono
+                    
                     if len(noun) > 7 or any(noun.lower().endswith(end) for end in ('ian', 'ite', 'ese', 'ish', 'oid', 'an')):
-                        validated['invalid'].append(noun) # Prawdopodobnie wymyślone
+                        validated['invalid'].append(noun) 
                     else:
-                        validated['unknown'].append(noun) # Prawdopodobnie nazwa własna (NPC)
+                        validated['unknown'].append(noun) 
             except Exception as e:
                 logger.error(f"Błąd walidacji {noun}: {e}")
                 validated['unknown'].append(noun)
@@ -236,11 +236,11 @@ class CanonValidator:
     
     def get_fallback_species(self) -> str:
         """Get safe fallback species."""
-        return 'Human' # Uproszczono - Human jest zawsze bezpieczny
+        return 'Human' 
     
     def get_fallback_planet(self) -> str:
         """Get safe fallback planet."""
-        return 'Tatooine' # Uproszczono - Tatooine jest zawsze bezpieczna
+        return 'Tatooine' 
     
     def get_all_categories(self) -> List[str]:
         """Pobiera listę wszystkich kategorii z bazy"""

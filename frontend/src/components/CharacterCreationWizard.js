@@ -11,25 +11,25 @@ function CharacterCreationWizard({ onClose, onSuccess }) {
   const [characterData, setCharacterData] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Krok 1 -> 2 (Basic Info -> Backstory)
+
   const handleBasicInfoComplete = (data) => {
     setCharacterData(prev => ({ ...prev, ...data }));
     setStep(2);
   };
   
-  // Krok 2 -> 3 (Backstory -> Attributes)
+
   const handleBackstoryComplete = (data) => {
     setCharacterData(prev => ({ ...prev, ...data }));
     setStep(3);
   };
 
-  // Krok 3 -> 4 (Attributes -> Skills)
+
   const handleAttributesComplete = (attributes) => {
     setCharacterData(prev => ({ ...prev, ...attributes }));
     setStep(4);
   };
   
-  // Krok 4 -> Finish
+
   const handleSkillsComplete = async (skills) => {
     const finalData = { ...characterData, ...skills };
     setIsSubmitting(true);
@@ -47,7 +47,7 @@ function CharacterCreationWizard({ onClose, onSuccess }) {
     }
   };
 
-  // Funkcja do wyszukiwania w Wiki
+
   const searchWiki = async (universe, category, query) => {
     if (!query || query.length < 2) {
       return [];
@@ -109,7 +109,7 @@ function CharacterCreationWizard({ onClose, onSuccess }) {
                 <SkillAllocation
                 characterData={characterData}
                 onBack={() => setStep(3)}
-                // ✅ POPRAWKA: Zmieniono onNext na onComplete, żeby pasowało do SkillAllocation.js
+         
                 onComplete={handleSkillsComplete}
                 isSubmitting={isSubmitting}
                 />

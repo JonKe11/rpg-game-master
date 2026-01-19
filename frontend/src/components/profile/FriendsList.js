@@ -1,4 +1,4 @@
-// frontend/src/components/profile/FriendsList.js
+
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axiosConfig';
 
@@ -34,7 +34,7 @@ function FriendsList() {
             await api.post('/friends/request', { username: inviteName });
             alert(`Friend request sent to ${inviteName}!`);
             setInviteName('');
-            loadData(); // Odśwież, bo może (teoretycznie) coś się zmieniło
+            loadData(); 
         } catch (error) {
             alert(error.response?.data?.detail || "Failed to send request. Check username.");
         }
@@ -43,9 +43,9 @@ function FriendsList() {
     const handleResponse = async (userId, status) => {
         try {
             await api.post(`/friends/respond/${userId}`, { status });
-            // Usuń z listy requestów lokalnie (szybka reakcja UI)
+            
             setRequests(prev => prev.filter(r => r.id !== userId));
-            if (status === 'accepted') loadData(); // Odśwież listę znajomych
+            if (status === 'accepted') loadData(); 
         } catch (error) {
             console.error("Error responding:", error);
             alert("Action failed.");

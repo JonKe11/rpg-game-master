@@ -1,4 +1,4 @@
-# backend/app/core/wiki/memory_alpha_client.py
+
 """
 Memory Alpha (Star Trek) implementation.
 
@@ -22,7 +22,7 @@ class MemoryAlphaClient(BaseWikiClient):
     - Star Trek specific entities
     """
     
-    # Star Trek category mapping
+    
     CATEGORY_MAPPING = {
         'planets': 'Planets',
         'species': 'Species',
@@ -34,7 +34,7 @@ class MemoryAlphaClient(BaseWikiClient):
         'technology': 'Technology',
     }
     
-    # Safe fallback entities
+    
     FALLBACK_ENTITIES = {
         'planet': 'Earth',
         'species': 'Human',
@@ -51,7 +51,7 @@ class MemoryAlphaClient(BaseWikiClient):
             base_url="https://memory-alpha.fandom.com/api/v1",
             rate_limit_calls=150,
             rate_limit_period=60,
-            canonical_prefix="",  # No prefix - all canon!
+            canonical_prefix="",  
             max_batch_size=100,
             max_concurrent=20,
             timeout=30

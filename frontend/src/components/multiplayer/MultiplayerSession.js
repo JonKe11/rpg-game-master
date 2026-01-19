@@ -346,7 +346,7 @@ function MultiplayerSession({ campaign, character, onEnd }) {
     const isNpcSpawn = msg.message_metadata?.original_type === 'npc_spawn' || msg.type === 'npc_spawn';
     const isCombatUpdate = msg.message_metadata?.original_type === 'combat_update' || msg.type === 'combat_update';
     
-    // ✅ Sprawdzamy, czy nadawca jest GM-em (żeby go pokolorować na żółto)
+  
     const isSenderGM = msg.user_id === campaign.game_master_id;
 
     if (isDiceRollResult || (isDiceRoll && msg.content.includes('rolled'))) {
@@ -540,7 +540,7 @@ function MultiplayerSession({ campaign, character, onEnd }) {
         </div>
     );
 
-    // ✅ ZMODYFIKOWANA SEKCJA RENDEROWANIA ZWYKŁYCH WIADOMOŚCI
+
     return (
       <div 
         key={index} 

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../api/axiosConfig';
 import CampaignProgress from './CampaignProgress';
-import DiceRoller from './multiplayer/DiceRoller'; // Używamy tego samego komponentu co w Multi
+import DiceRoller from './multiplayer/DiceRoller'; 
 
 function GameSession({ character, sessionConfig, onClose }) {
   const [session, setSession] = useState(null);
@@ -12,12 +12,12 @@ function GameSession({ character, sessionConfig, onClose }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isStarting, setIsStarting] = useState(true);
   
-  // Statystyki do rzutów (pobierane z postaci)
+
   const [characterStats, setCharacterStats] = useState(null);
 
   const messagesEndRef = useRef(null);
 
-  // Helper do obrazków
+
   const getProxiedImageUrl = (originalUrl) => {
       if (!originalUrl) return null;
       if (originalUrl.startsWith('data:image')) return originalUrl;
@@ -35,13 +35,13 @@ function GameSession({ character, sessionConfig, onClose }) {
     scrollToBottom();
   }, [messages]);
 
-  // Pobierz pełne statystyki postaci na starcie
+
   useEffect(() => {
       const fetchStats = async () => {
           try {
-              // Zakładamy, że endpoint do pobrania postaci istnieje
+           
               const res = await api.get(`/characters/${character.id}`);
-              // Mapujemy statystyki z DB na prosty obiekt
+     
               const stats = {
                   strength: res.data.strength || 10,
                   dexterity: res.data.dexterity || 10,
@@ -49,7 +49,7 @@ function GameSession({ character, sessionConfig, onClose }) {
                   intelligence: res.data.intelligence || 10,
                   wisdom: res.data.wisdom || 10,
                   charisma: res.data.charisma || 10,
-                  ...res.data // Reszta pól
+                  ...res.data 
               };
               setCharacterStats(stats);
           } catch (e) {
@@ -59,24 +59,22 @@ function GameSession({ character, sessionConfig, onClose }) {
       fetchStats();
   }, [character.id]);
 
-  // Funkcja pobierająca historię wiadomości (ważne dla AI Tools!)
+
   const fetchMessages = useCallback(async (sessionId) => {
       if (!sessionId) return;
       try {
-          // Pobieramy sesję, która zawiera w sobie chat_history
-          // (Dostosuj endpoint jeśli masz dedykowany do wiadomości w AI mode, 
-          //  ale zazwyczaj w SinglePlayer cała historia jest w obiekcie sesji)
+
           const response = await api.get(`/game-sessions/active`); 
-          // Znajdź naszą sesję
+  
           const mySession = response.data.find(s => s.id === sessionId);
           
           if (mySession && mySession.chat_history) {
-              // Mapujemy historię na format spójny z renderMessage
+     
               const history = mySession.chat_history.map((msg, idx) => ({
-                  id: idx, // W SP używamy indeksu jako ID
+                  id: idx, 
                   role: msg.role,
                   content: msg.content,
-                  // Obsługa metadanych z AI Tools (zapisanych w bazie)
+               
                   message_type: msg.message_type || (msg.role === 'assistant' ? 'narration' : 'player_action'),
                   message_metadata: msg.message_metadata || {},
                   timestamp: msg.timestamp || new Date().toISOString()
@@ -113,7 +111,7 @@ function GameSession({ character, sessionConfig, onClose }) {
         }]);
       }
       
-      // Jeśli sesja już istniała i miała historię, pobierz ją
+     
       if (data.session_id) {
           await fetchMessages(data.session_id);
       }
@@ -154,7 +152,7 @@ function GameSession({ character, sessionConfig, onClose }) {
     if (!customAction) setInputMessage('');
     setIsLoading(true);
 
-    // Optimistic UI update
+  
     const tempId = Date.now();
     setMessages(prev => [...prev, {
       id: tempId,
@@ -169,8 +167,7 @@ function GameSession({ character, sessionConfig, onClose }) {
         action: actionToSend
       });
 
-      // Po otrzymaniu odpowiedzi, najlepiej odświeżyć całą historię,
-      // ponieważ AI mogło wstrzyknąć "Tool Events" (np. NPC Spawn) przed swoją odpowiedzią tekstową.
+    
       await fetchMessages(session.session_id || session.id);
 
       if (response.data.campaign_update) {
@@ -189,7 +186,6 @@ function GameSession({ character, sessionConfig, onClose }) {
     }
   };
 
-  // ✅ Funkcja obsługująca rzuty atrybutów (podpięta pod pasek przycisków)
   const handleAttributeRoll = async (attrName) => {
       if (!characterStats) return;
       
@@ -198,32 +194,31 @@ function GameSession({ character, sessionConfig, onClose }) {
       const modifier = Math.floor((score - 10) / 2);
       const modStr = modifier >= 0 ? `+${modifier}` : modifier;
       
-      // W trybie AI wysyłamy to jako tekstową deklarację akcji
+
       const actionText = `[System]: Rzucam na ${attrName} (${modStr}).`;
       await sendAction(null, actionText);
   };
 
-  // ✅ Funkcja obsługująca atak w trybie AI (z DiceRoller)
+
   const handleCombatAttack = async (damage, targetId, targetName) => {
-      // W trybie Singleplayer AI nie mamy bezpośredniego dostępu do bazy wiadomości przez ID,
-      // więc wysyłamy informację o ataku jako akcję gracza, a AI zaktualizuje stan.
+
       const actionText = `[Combat]: Atakuję cel ${targetName || 'Enemy'}! Zadaję ${damage} obrażeń.`;
       await sendAction(null, actionText);
   };
 
   const renderMessage = (msg, index) => {
-    // Rozpoznawanie typów wiadomości (kompatybilne z backendem AI Tools)
+
     const isSystem = msg.role === 'system';
     const isUser = msg.role === 'user';
     const isAssistant = msg.role === 'assistant';
     
-    // Sprawdzamy metadane (AI Tools zapisują tu info)
+
     const meta = msg.message_metadata || {};
     const isNpcSpawn = meta.original_type === 'npc_spawn' || msg.message_type === 'npc_spawn';
     const isCombatUpdate = meta.original_type === 'combat_update' || msg.message_type === 'gm_event';
     const isDiceRoll = msg.content.includes('[System]: Rzucam') || msg.message_type === 'dice_roll_result';
 
-    // 1. RZUTY KOŚCIĄ
+
     if (isDiceRoll) {
         return (
             <div key={index} className="flex justify-end my-2">
@@ -235,7 +230,7 @@ function GameSession({ character, sessionConfig, onClose }) {
         );
     }
 
-    // 2. KARTA NPC (Spawned by AI Tool)
+
     if (isNpcSpawn) {
         const npc = meta.npc || {};
         return (
@@ -259,7 +254,7 @@ function GameSession({ character, sessionConfig, onClose }) {
         );
     }
 
-    // 3. COMBAT EVENT (AI generated)
+
     if (isCombatUpdate) {
         let combatData = {};
         try { combatData = JSON.parse(msg.content); } catch (e) { return null; }
@@ -289,12 +284,12 @@ function GameSession({ character, sessionConfig, onClose }) {
                             {/* W trybie AI Singleplayer, gracz zawsze widzi opcję ataku na wrogów */}
                             {c.type !== 'player' && (
                                 <DiceRoller 
-                                    campaignId={null} // Niepotrzebne w SP
+                                    campaignId={null} 
                                     characterId={character.id}
                                     characterStats={characterStats}
-                                    targets={[]} // W SP cel wybieramy "kontekstowo"
+                                    targets={[]} 
                                     onAttack={(damage) => handleCombatAttack(damage, c.id, c.name)}
-                                    compact={true} // Wersja mini (tylko przycisk)
+                                    compact={true} 
                                 />
                             )}
                         </div>
@@ -304,7 +299,7 @@ function GameSession({ character, sessionConfig, onClose }) {
         );
     }
 
-    // 4. STANDARDOWE WIADOMOŚCI
+   
     return (
       <div 
         key={index} 

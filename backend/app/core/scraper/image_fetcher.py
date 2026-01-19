@@ -1,4 +1,4 @@
-# backend/app/core/scraper/image_fetcher.py
+
 """
 Shared image fetching logic - used by both wiki endpoints and prefetch service.
 Follows DRY principle - single source of truth for image operations.
@@ -13,7 +13,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Global cache directory
+
 CACHE_DIR = Path("./image_cache")
 CACHE_DIR.mkdir(exist_ok=True)
 
@@ -72,7 +72,7 @@ class ImageFetcher:
         if not url.startswith('http'):
             return False
         
-        # Fix for corrupted URLs (from logs: "'d" prefix)
+        
         if url.startswith("'d") or url.startswith('"d'):
             return False
         
@@ -111,14 +111,14 @@ class ImageFetcher:
             - was_cached: True if image was already in cache
             - content: Image binary content (None if failed)
         """
-        # Validate URL
+        
         if not self.validate_url(url):
             logger.warning(f"Invalid URL: {url[:50]}")
             return (False, False, None)
         
         cache_path = self.get_cache_path(url)
         
-        # Check cache first
+        
         if cache_path.exists():
             try:
                 with open(cache_path, 'rb') as f:
@@ -126,9 +126,9 @@ class ImageFetcher:
                 return (True, True, content)
             except Exception as e:
                 logger.error(f"Cache read error: {e}")
-                # Continue to fetch from source
+                
         
-        # Fetch from source with retry
+        
         for attempt in range(max_retries):
             try:
                 response = requests.get(
@@ -141,7 +141,7 @@ class ImageFetcher:
                 
                 content = response.content
                 
-                # Save to cache
+                
                 try:
                     with open(cache_path, 'wb') as f:
                         f.write(content)
@@ -219,7 +219,7 @@ class ImageFetcher:
             
             return (name, success, was_cached)
         
-        # Process in parallel
+        
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_name = {
                 executor.submit(process_single, args): args[0]

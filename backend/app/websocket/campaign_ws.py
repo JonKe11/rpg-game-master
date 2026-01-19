@@ -1,4 +1,4 @@
-# backend/app/websocket/campaign_ws.py
+
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, List
 import json
@@ -8,7 +8,7 @@ class ConnectionManager:
     """Manages WebSocket connections for campaigns"""
     
     def __init__(self):
-        # campaign_id -> [websockets]
+        
         self.active_connections: Dict[int, List[WebSocket]] = {}
     
     async def connect(self, websocket: WebSocket, campaign_id: int):
@@ -26,7 +26,7 @@ class ConnectionManager:
         if campaign_id in self.active_connections:
             self.active_connections[campaign_id].remove(websocket)
             
-            # Clean up empty rooms
+            
             if not self.active_connections[campaign_id]:
                 del self.active_connections[campaign_id]
         
@@ -37,11 +37,11 @@ class ConnectionManager:
         if campaign_id not in self.active_connections:
             return
         
-        # Add timestamp if not present
+        
         if "timestamp" not in message:
             message["timestamp"] = datetime.now().isoformat()
         
-        # Send to all connected clients
+        
         disconnected = []
         for connection in self.active_connections[campaign_id]:
             try:
@@ -50,7 +50,7 @@ class ConnectionManager:
                 print(f"Error sending to client: {e}")
                 disconnected.append(connection)
         
-        # Clean up disconnected clients
+        
         for conn in disconnected:
             self.disconnect(conn, campaign_id)
     
@@ -61,5 +61,5 @@ class ConnectionManager:
         
         await websocket.send_json(message)
 
-# Global manager instance
+
 manager = ConnectionManager()

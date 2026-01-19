@@ -1,4 +1,4 @@
-# backend/app/services/biography_generator.py
+
 from sqlalchemy.orm import Session
 import ollama
 import logging

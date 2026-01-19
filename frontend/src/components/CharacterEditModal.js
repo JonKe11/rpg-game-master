@@ -107,11 +107,11 @@ function CharacterEditModal({ character, onClose, onSuccess }) {
     setError(null);
 
     try {
-      // Przygotuj tylko zmienione pola
+     
       const updates = {};
       Object.keys(formData).forEach(key => {
         if (formData[key] !== character[key]) {
-          // Konwertuj typy
+        
           if (key === 'level' || key === 'born_year') {
             updates[key] = formData[key] ? parseInt(formData[key]) : null;
           } else if (key === 'height' || key === 'mass') {

@@ -1,4 +1,4 @@
-# backend/app/api/v1/endpoints/friends.py
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
@@ -62,7 +62,7 @@ async def send_friend_request(
     if target_user.id == current_user.id:
         raise HTTPException(400, "Cannot add yourself")
         
-    # Sprawdź czy relacja już istnieje
+    
     existing = db.query(Friendship).filter(
         or_(
             and_(Friendship.sender_id == current_user.id, Friendship.receiver_id == target_user.id),

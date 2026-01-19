@@ -15,7 +15,7 @@ const RARITY_OPTIONS = [
 function NpcCreator({ campaignId, universe }) {
     const [mode, setMode] = useState('wiki'); 
     
-    // ✅ Główny stan NPC
+   
     const [npc, setNpc] = useState({
         name: '',
         race: 'Human',
@@ -26,7 +26,7 @@ function NpcCreator({ campaignId, universe }) {
         armor_class: 10,       
         damage_reduction: 0,   
         attitude: 'Hostile',   
-        // ✅ NOWOŚĆ: Zamiast statystyk, dajemy kość obrażeń
+        
         damage_dice: '1d6' 
     });
 
@@ -83,7 +83,7 @@ function NpcCreator({ campaignId, universe }) {
         }
     };
 
-    // Widok wyboru z Wiki
+    
     if (mode === 'wiki') {
         return (
             <div className="h-full flex flex-col">
@@ -108,7 +108,7 @@ function NpcCreator({ campaignId, universe }) {
 
     const currentRarity = RARITY_OPTIONS.find(r => r.value === npc.rarity) || RARITY_OPTIONS[0];
 
-    // Widok edytora manualnego
+   
     return (
         <div className="bg-gray-800 rounded-lg p-6 h-full overflow-y-auto space-y-4 custom-scrollbar">
             <div className="flex justify-between items-center mb-4">
@@ -196,7 +196,7 @@ function NpcCreator({ campaignId, universe }) {
                 </div>
             </div>
 
-            {/* ✅ UPROSZCZONA SEKCJA STATYSTYK */}
+            {/*  UPROSZCZONA SEKCJA STATYSTYK */}
             <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
                 <h4 className="text-gray-400 text-xs uppercase font-bold mb-3">Combat Stats</h4>
                 <div className="grid grid-cols-2 gap-4 mb-4">

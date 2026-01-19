@@ -186,7 +186,7 @@ function CharacterDetails({ character, onClose, onEdit, onDelete, onStartSession
   );
 }
 
-// Helper component for consistent detail rows
+
 function DetailRow({ label, value }) {
   if (!value) return null;
   

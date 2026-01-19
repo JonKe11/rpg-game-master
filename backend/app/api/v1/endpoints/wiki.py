@@ -1,4 +1,4 @@
-# backend/app/api/v1/endpoints/wiki.py
+
 """
 ✅ WERSJA 4.0 - Używa wyłącznie PostgreSQL i nowego endpointu /search
 """
@@ -10,7 +10,7 @@ import logging
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
-# ✅ Używamy TYLKO HybridCacheService (który używa Postgres)
+
 from app.services.hybrid_cache_service import HybridCacheService
 from app.core.scraper.image_fetcher import ImageFetcher
 from app.core.dependencies import get_db
@@ -22,15 +22,15 @@ router = APIRouter()
 
 image_fetcher = ImageFetcher()
 
-# ============================================
-# MODELS
-# ============================================
+
+
+
 class WikiArticleInfo(BaseModel):
     name: str
     description: Optional[str] = None
     image_url: Optional[str] = None
     image_cached: bool = False
-    source_url: Optional[str] = None # ✅ Dodano source_url
+    source_url: Optional[str] = None 
 
     class Config:
         from_attributes = True
@@ -51,9 +51,9 @@ class PaginatedSearchResponse(BaseModel):
     items: List[WikiArticleInfo]
 
 
-# ============================================
-# ✅ NOWY UNIWERSALNY ENDPOINT WYSZUKIWANIA
-# ============================================
+
+
+
 @router.get("/search", response_model=PaginatedSearchResponse, tags=["Wiki - Search (v3)"])
 async def search_wiki_category(
     universe: str = Query("star_wars"),
@@ -61,7 +61,7 @@ async def search_wiki_category(
     q: Optional[str] = Query(None, description="Search query (if null, returns all)"),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
-    with_images: bool = Query(False, description="Filter for items with images only"), # Dodane dla ItemBrowser
+    with_images: bool = Query(False, description="Filter for items with images only"), 
     db: Session = Depends(get_db)
 ):
     """
@@ -71,8 +71,8 @@ async def search_wiki_category(
     try:
         hybrid_service = HybridCacheService(db)
         
-        # Użyj zaktualizowanej funkcji z HybridCache
-        # (Musimy zejść niżej, do pg_cache, aby obsłużyć 'with_images')
+        
+        
         search_result = hybrid_service.pg_cache.search_articles_paginated(
             universe=universe,
             category=category,
@@ -82,7 +82,7 @@ async def search_wiki_category(
             with_images_only=with_images
         )
         
-        # Formatowanie odpowiedzi
+        
         items = [
             WikiArticleInfo(
                 name=article.title,
@@ -104,11 +104,11 @@ async def search_wiki_category(
         raise HTTPException(status_code=500, detail="Error searching wiki data")
 
 
-# ============================================
-# ENDPOINTY POMOCNICZE (Nadal potrzebne)
-# ============================================
 
-# Drzewo lokacji (bez zmian)
+
+
+
+
 tree_router = APIRouter(prefix="/locations/tree", tags=["Wiki - Location Tree"])
 @tree_router.get("/regions", response_model=List[str])
 async def get_location_regions(universe: str = Query(default="star_wars"), db: Session = Depends(get_db)):
@@ -134,7 +134,7 @@ async def get_locations_on_planet(planet: str, universe: str = Query(default="st
 router.include_router(tree_router)
 
 
-# Image Proxy (bez zmian)
+
 @router.get("/image-proxy", tags=["Wiki - Utils"])
 async def proxy_image(url: str):
     cache_path = image_fetcher.get_cache_path(url)
@@ -146,7 +146,7 @@ async def proxy_image(url: str):
         return Response(status_code=404)
     return StreamingResponse(BytesIO(content), media_type='image/png', headers={'Cache-Control': 'public, max-age=2592000', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'MISS'})
 
-# Pobieranie pojedynczego artykułu (bez zmian)
+
 @router.get("/{universe}/{category}/{title}", tags=["Wiki - Utils"])
 async def get_article_by_title(universe: str, category: str, title: str, db: Session = Depends(get_db)):
     postgres_cache = PostgresCacheService(db)
@@ -169,9 +169,8 @@ async def get_article_by_title(universe: str, category: str, title: str, db: Ses
         result["description"] = ""
     return result
 
-# ============================================
-# ⛔️ USUNIĘTE ENDPOINTY LEGACY ⛔️
-# Usunęliśmy /canon/all, /canon/summary, /canon/category/{category},
-# /items/all, /items/category/{category}, /items/category/{category}/with-images
-# i /{universe}/search
-# ============================================
+
+
+
+
+

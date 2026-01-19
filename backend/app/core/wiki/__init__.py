@@ -1,4 +1,4 @@
-# backend/app/core/wiki/__init__.py
+
 """
 Wiki module - FANDOM API integration.
 

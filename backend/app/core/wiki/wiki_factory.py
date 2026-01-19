@@ -1,4 +1,4 @@
-# backend/app/core/wiki/wiki_factory.py
+
 """
 Wiki factory for creating wiki clients.
 """
@@ -14,13 +14,13 @@ class WikiConfig:
     base_url: str
     api_path: str
     
-    # Category mappings
+    
     category_map: Dict[str, str]
 
 
-# ============================================
-# WIKI CONFIGURATIONS
-# ============================================
+
+
+
 
 WIKI_CONFIGS = {
     'star_wars': WikiConfig(
@@ -28,15 +28,15 @@ WIKI_CONFIGS = {
         base_url='https://starwars.fandom.com',
         api_path='/api/v1',
         category_map={
-            # CORRECTED: Actual Wookieepedia category names (without "Canon_" prefix)
-            'planets': 'Planets',                    # Generic category
-            'species': 'Sentient_species',           # Not "Species"!
-            'characters': 'Individuals',             # Not "Characters"!
+            
+            'planets': 'Planets',                    
+            'species': 'Sentient_species',           
+            'characters': 'Individuals',             
             'weapons': 'Weapons',
             'armor': 'Armor',
             'vehicles': 'Vehicles',
-            'droids': 'Droid_models',               # Not "Droids"!
-            'items': 'Technology',                   # Broad category
+            'droids': 'Droid_models',               
+            'items': 'Technology',                   
             'organizations': 'Organizations',
             'locations': 'Locations',
             'battles': 'Battles',
@@ -103,7 +103,7 @@ def create_wiki_client(universe: str):
     
     config = WIKI_CONFIGS[universe]
     
-    # Import here to avoid circular imports
+    
     from app.core.wiki.base_wiki_client import BaseWikiClient
     
     return BaseWikiClient(config)

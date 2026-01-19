@@ -1,10 +1,10 @@
-// frontend/src/components/Auth/AuthPage.js
+
 import React, { useState } from 'react';
 import LoginForm from './LoginForm';
 import RegisterForm from './RegisterForm';
 
 function AuthPage({ onAuthSuccess }) {
-  const [view, setView] = useState('login'); // 'login' or 'register'
+  const [view, setView] = useState('login'); 
 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">

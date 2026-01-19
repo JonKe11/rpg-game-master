@@ -17,7 +17,7 @@ function CampaignList({ character, onCreateNew, onJoinCampaign }) {
     fetchCampaigns();
     const interval = setInterval(fetchCampaigns, 3000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line
+    
   }, []);
 
   const fetchCampaigns = async () => {

@@ -19,14 +19,14 @@ function LoginForm({ onLoginSuccess, onSwitchToRegister }) {
     setLoading(true);
 
     try {
-      // FastAPI OAuth2 wymaga FormData
+   
       const formData = new URLSearchParams();
       formData.append('username', username);
       formData.append('password', password);
 
       const response = await api.post('/auth/login', formData);
 
-      // Zapisz token
+    
       localStorage.setItem('token', response.data.access_token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
 
